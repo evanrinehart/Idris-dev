@@ -291,8 +291,13 @@ isInfixOf a b = isInfixOf (unpack a) (unpack b)
 
 
 utf8encode : String -> CString
+utf8encode _ = "<<utf8encode>>"
+
 utf8decode : CString -> Either Int String
+utf8decode _ = Left 932
+
 utf8decode' : CString -> String
+utf8decode' _ = "<<utf8decode'>>"
 
 partial
 putStr : CString -> IO ()

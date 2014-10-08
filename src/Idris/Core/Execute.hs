@@ -235,8 +235,8 @@ execApp env ctxt (EP _ fp _) (_:fn:str:_:rest)
     | fp == mkfprim,
       Just (FFun "putStr" _ _) <- foreignFromTT fn
            = case str of
-               EConstant (Str arg) -> do execIO (putStr arg)
-                                         execApp env ctxt ioUnit rest
+               EConstant (CStr arg) -> do execIO (putStr arg)
+                                          execApp env ctxt ioUnit rest
                _ -> execFail . Msg $
                       "The argument to putStr should be a constant string, but it was " ++
                       show str ++
@@ -245,8 +245,8 @@ execApp env ctxt (EP _ fp _) (_:fn:ch:_:rest)
     | fp == mkfprim,
       Just (FFun "putchar" _ _) <- foreignFromTT fn
            = case ch of
-               EConstant (Ch c) -> do execIO (putChar c)
-                                      execApp env ctxt ioUnit rest
+               EConstant (CCh c) -> do execIO (putChar c)
+                                       execApp env ctxt ioUnit rest
                EConstant (I i)  -> do execIO (putChar (toEnum i))
                                       execApp env ctxt ioUnit rest
                _ -> execFail . Msg $
@@ -258,7 +258,7 @@ execApp env ctxt (EP _ fp _) (_:fn:_:handle:_:rest)
       Just (FFun "idris_readStr" _ _) <- foreignFromTT fn
            = case handle of
                EHandle h -> do contents <- execIO $ hGetLine h
-                               execApp env ctxt (EConstant (Str (contents ++ "\n"))) rest
+                               execApp env ctxt (EConstant (CStr (contents ++ "\n"))) rest
                _ -> execFail . Msg $
                       "The argument to idris_readStr should be a handle, but it was " ++
                       show handle ++
@@ -271,7 +271,7 @@ execApp env ctxt (EP _ fp _) (_:fn:fileStr:modeStr:rest)
     | fp == mkfprim,
       Just (FFun "fileOpen" _ _) <- foreignFromTT fn
            = case (fileStr, modeStr) of
-               (EConstant (Str f), EConstant (Str mode)) ->
+               (EConstant (Str f), EConstant (CStr mode)) ->
                  do f <- execIO $
                          catch (do let m = case mode of
                                              "r"  -> Right ReadMode
@@ -331,8 +331,8 @@ execApp env ctxt (EP _ fp _) (_:fn:ptr:rest)
                EHandle h -> let res = ioWrap . EConstant . I $ 0
                             in execApp env ctxt res (tail rest)
                -- A foreign-returned char* has to be tested for NULL sometimes
-               EConstant (Str s) -> let res = ioWrap . EConstant . I $ 0
-                                    in execApp env ctxt res (tail rest)
+               EConstant (CStr s) -> let res = ioWrap . EConstant . I $ 0
+                                     in execApp env ctxt res (tail rest)
                _ -> execFail . Msg $
                       "The argument to isNull should be a pointer or file handle or string, but it was " ++
                       show ptr ++
@@ -411,11 +411,11 @@ getOp fn [_, _, x] | fn == pbm = Just (return x)
 getOp fn [EP _ fn' _]
     | fn == prs && fn' == pstd =
               Just $ do line <- execIO getLine
-                        return (EConstant (Str line))
+                        return (EConstant (CStr line))
 getOp fn [EHandle h]
     | fn == prs =
               Just $ do contents <- execIO $ hGetLine h
-                        return (EConstant (Str (contents ++ "\n")))
+                        return (EConstant (CStr (contents ++ "\n")))
 getOp n args = getPrim n primitives >>= flip applyPrim args
     where getPrim :: Name -> [Prim] -> Maybe ([ExecVal] -> Maybe ExecVal)
           getPrim n [] = Nothing
@@ -484,7 +484,7 @@ idrisType :: FType -> ExecVal
 idrisType FUnit = EP Ref unitTy EErased
 idrisType ft = EConstant (idr ft)
     where idr (FArith ty) = AType ty
-          idr FString = StrType
+          idr FString = CStrType
           idr FPtr = PtrType
 
 data Foreign = FFun String [FType] FType deriving Show
@@ -513,14 +513,14 @@ call (FFun name argTypes retType) args =
           call' (Fun _ h) args (FArith ATFloat) = do
             res <- execIO $ callFFI h retCDouble (prepArgs args)
             return (EConstant (Fl (realToFrac res)))
-          call' (Fun _ h) args (FArith (ATInt ITChar)) = do
+          call' (Fun _ h) args (FArith (ATInt ITCChar)) = do
             res <- execIO $ callFFI h retCChar (prepArgs args)
-            return (EConstant (Ch (castCCharToChar res)))
+            return (EConstant (CCh (castCCharToChar res)))
           call' (Fun _ h) args FString = do res <- execIO $ callFFI h retCString (prepArgs args)
                                             if res == nullPtr
                                                then return (EPtr res)
                                                else do hStr <- execIO $ peekCString res
-                                                       return (EConstant (Str hStr))
+                                                       return (EConstant (CStr hStr))
 
           call' (Fun _ h) args FPtr = EPtr <$> (execIO $ callFFI h (retPtr retVoid) (prepArgs args))
           call' (Fun _ h) args FUnit = do _ <- execIO $ callFFI h retVoid (prepArgs args)
@@ -535,8 +535,8 @@ call (FFun name argTypes retType) args =
           prepArg (EConstant (B32 i)) = argCInt (fromIntegral i)
           prepArg (EConstant (B64 i)) = argCLong (fromIntegral i)
           prepArg (EConstant (Fl f)) = argCDouble (realToFrac f)
-          prepArg (EConstant (Ch c)) = argCChar (castCharToCChar c) -- FIXME - castCharToCChar only safe for first 256 chars
-          prepArg (EConstant (Str s)) = argString s
+          prepArg (EConstant (CCh c)) = argCChar (castCharToCChar c) -- c in CCh c should only be at most U=255 so castCharToCChar is OK
+          prepArg (EConstant (CStr s)) = argString s
           prepArg (EPtr p) = argPtr p
           prepArg other = trace ("Could not use " ++ take 100 (show other) ++ " as FFI arg.") undefined
 
@@ -556,7 +556,7 @@ getFTy (EApp (EP _ (UN fi) _) (EP _ (UN intTy) _))
   | fi == txt "FIntT" =
     case str intTy of
       "ITNative" -> Just (FArith (ATInt ITNative))
-      "ITChar" -> Just (FArith (ATInt ITChar))
+      "ITCChar" -> Just (FArith (ATInt ITCChar))
       "IT8" -> Just (FArith (ATInt (ITFixed IT8)))
       "IT16" -> Just (FArith (ATInt (ITFixed IT16)))
       "IT32" -> Just (FArith (ATInt (ITFixed IT32)))

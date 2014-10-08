@@ -433,18 +433,18 @@ bfBin op [Fl x, Fl y] = let i = (if op x y then 1 else 0) in
 bfBin _ _ = Nothing
 
 bcBin :: (Char -> Char -> Bool) -> [Const] -> Maybe Const
-bcBin op [Ch x, Ch y] = let i = (if op x y then 1 else 0) in
-                        Just $ I i
+bcBin op [CCh x, CCh y] = let i = (if op x y then 1 else 0) in
+                          Just $ I i
 bcBin _ _ = Nothing
 
 bsBin :: (String -> String -> Bool) -> [Const] -> Maybe Const
-bsBin op [Str x, Str y]
+bsBin op [CStr x, CStr y]
     = let i = (if op x y then 1 else 0) in
           Just $ I i
 bsBin _ _ = Nothing
 
 sBin :: (String -> String -> String) -> [Const] -> Maybe Const
-sBin op [Str x, Str y] = Just $ Str (op x y)
+sBin op [CStr x, CStr y] = Just $ CStr (op x y)
 sBin _ _ = Nothing
 
 bsrem :: IntTy -> [Const] -> Maybe Const
@@ -458,7 +458,7 @@ bsrem (ITFixed IT32) [B32 x, B32 y]
 bsrem (ITFixed IT64) [B64 x, B64 y]
     = Just $ B64 (fromIntegral (fromIntegral x `rem` fromIntegral y :: Int64))
 bsrem ITNative [I x, I y] = Just $ I (x `rem` y)
-bsrem ITCChar [Ch x, Ch y] = Just $ Ch (chr $ (ord x) `rem` (ord y))
+bsrem ITCChar [CCh x, CCh y] = Just $ CCh (chr $ (ord x) `rem` (ord y))
 bsrem (ITVec IT8  _) [B8V  x, B8V  y]
     = Just . B8V  $
       V.zipWith (\n d -> (fromIntegral (fromIntegral n `rem` fromIntegral d :: Int8)))  x y
@@ -657,9 +657,9 @@ floatToInt ity [Fl x] = Just $ toInt ity (truncate x :: Integer)
 floatToInt _ _ = Nothing
 
 c_intToChar, c_charToInt :: [Const] -> Maybe Const
-c_intToChar [(I x)] = Just . Ch . toEnum $ x
+c_intToChar [(I x)] = Just . CCh . toEnum $ x
 c_intToChar _ = Nothing
-c_charToInt [(Ch x)] = Just . I . fromEnum $ x
+c_charToInt [(CCh x)] = Just . I . fromEnum $ x
 c_charToInt _ = Nothing
 
 c_negFloat :: [Const] -> Maybe Const
@@ -692,18 +692,18 @@ p_floatFloor = p_fPrim (fromInteger . floor)
 p_floatCeil = p_fPrim (fromInteger . ceiling)
 
 p_strLen, p_strHead, p_strTail, p_strIndex, p_strCons, p_strRev :: [Const] -> Maybe Const
-p_strLen [Str xs] = Just $ I (length xs)
+p_strLen [CStr xs] = Just $ I (length xs)
 p_strLen _ = Nothing
-p_strHead [Str (x:xs)] = Just $ Ch x
+p_strHead [CStr (x:xs)] = Just $ CCh x
 p_strHead _ = Nothing
-p_strTail [Str (x:xs)] = Just $ Str xs
+p_strTail [CStr (x:xs)] = Just $ CStr xs
 p_strTail _ = Nothing
-p_strIndex [Str xs, I i]
-   | i < length xs = Just $ Ch (xs!!i)
+p_strIndex [CStr xs, I i]
+   | i < length xs = Just $ CCh (xs!!i)
 p_strIndex _ = Nothing
-p_strCons [Ch x, Str xs] = Just $ Str (x:xs)
+p_strCons [CCh x, CStr xs] = Just $ CStr (x:xs)
 p_strCons _ = Nothing
-p_strRev [Str xs] = Just $ Str (reverse xs)
+p_strRev [CStr xs] = Just $ CStr (reverse xs)
 p_strRev _ = Nothing
 
 p_allocate, p_appendBuffer :: [Const] -> Maybe Const

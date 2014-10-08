@@ -1,14 +1,12 @@
 module Prelude.Bits
 
 import Prelude.Strings
+import Prelude.Chars
 import Prelude.Vect
 import Prelude.Bool
 
 %access public
 %default total
-
-ord : Char -> Int
-chr : Int -> Char
 
 addChar : Char -> Int -> Char
 addChar c n = chr ((ord c) + n)
