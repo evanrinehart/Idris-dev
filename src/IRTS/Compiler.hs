@@ -478,7 +478,7 @@ doForeign vs env (_ : fgn : args)
 
     mkIty "FFloat"      = FArith ATFloat
     mkIty "FInt"        = mkIntIty "ITNative"
-    mkIty "FChar"       = mkIntIty "ITChar"
+    mkIty "FChar"       = mkIntIty "ITCChar"
     mkIty "FByte"       = mkIntIty "IT8"
     mkIty "FShort"      = mkIntIty "IT16"
     mkIty "FLong"       = mkIntIty "IT64"
@@ -499,7 +499,7 @@ doForeign vs env (_ : fgn : args)
     mkIty x             = error $ "Unknown type " ++ x
 
     mkIntIty "ITNative" = FArith (ATInt ITNative)
-    mkIntIty "ITChar" = FArith (ATInt ITChar)
+    mkIntIty "ITCChar" = FArith (ATInt ITCChar)
     mkIntIty "IT8"  = FArith (ATInt (ITFixed IT8))
     mkIntIty "IT16" = FArith (ATInt (ITFixed IT16))
     mkIntIty "IT32" = FArith (ATInt (ITFixed IT32))
@@ -640,7 +640,7 @@ irAlt vs _ (ConstCase x rhs)
 
     matchableTy (AType (ATInt ITNative)) = True
     matchableTy (AType (ATInt ITBig)) = True
-    matchableTy (AType (ATInt ITChar)) = True
+    matchableTy (AType (ATInt ITCChar)) = True
     matchableTy StrType = True
 
     matchableTy (AType (ATInt (ITFixed IT8)))  = True

@@ -467,7 +467,7 @@ translateConstant (AType (ATInt ITNative)) = JSType JSIntTy
 translateConstant StrType                  = JSType JSStringTy
 translateConstant (AType (ATInt ITBig))    = JSType JSIntegerTy
 translateConstant (AType ATFloat)          = JSType JSFloatTy
-translateConstant (AType (ATInt ITChar))   = JSType JSCharTy
+translateConstant (AType (ATInt ITCChar))  = JSType JSCharTy
 translateConstant PtrType                  = JSType JSPtrTy
 translateConstant Forgot                   = JSType JSForgotTy
 translateConstant (BI 0)                   = JSNum (JSInteger JSBigZero)
@@ -725,7 +725,7 @@ jsOP _ reg op args = JSAssign (translateReg reg) jsOP'
       | (LSGe ATFloat)   <- op
       , (lhs:rhs:_)      <- args = translateBinaryOp ">=" lhs rhs
 
-      | (LPlus (ATInt ITChar)) <- op
+      | (LPlus (ATInt ITCChar)) <- op
       , (lhs:rhs:_)            <- args =
           jsCall "i$fromCharCode" [
             JSBinOp "+" (

@@ -40,11 +40,17 @@ instance Eq Integer where
 instance Eq Float where
     (==) = boolOp prim__eqFloat
 
-instance Eq Char where
-    (==) = boolOp prim__eqChar
+instance Eq CChar where
+    (==) = boolOp prim__eqCChar
+
+instance Eq CString where
+    (==) = boolOp prim__eqString
 
 instance Eq String where
-    (==) = boolOp prim__eqString
+  (==) _ _ = False
+
+instance Eq Char where
+  (==) _ _ = False
 
 instance Eq Bool where
     True  == True  = True
@@ -112,13 +118,13 @@ instance Ord Float where
                   GT
 
 
-instance Ord Char where
+instance Ord CChar where
     compare x y = if (x == y) then EQ else
-                  if (boolOp prim__sltChar x y) then LT else
+                  if (boolOp prim__sltCChar x y) then LT else
                   GT
 
 
-instance Ord String where
+instance Ord CString where
     compare x y = if (x == y) then EQ else
                   if (boolOp prim__ltString x y) then LT else
                   GT

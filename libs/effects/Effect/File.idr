@@ -81,8 +81,8 @@ instance Handler FileIO IO where
     handle (FH h) Close      k = do closeFile h
                                     k () ()
     handle (FH h) ReadLine        k = do str <- fread h
-                                         k str (FH h)
-    handle (FH h) (WriteString str) k = do fwrite h str
+                                         k (utf8decode' str) (FH h)
+    handle (FH h) (WriteString str) k = do fwrite h (utf8encode str)
                                            k () (FH h)
     handle (FH h) EOF             k = do e <- feof h
                                          k e (FH h)

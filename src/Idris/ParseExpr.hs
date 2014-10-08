@@ -418,6 +418,7 @@ bracketedExpr syn e =
 -- big integer, otherwise try fromInteger and the constants as alternatives.
 -- a better solution would be to fix fromInteger to work with Integer, as the
 -- name suggests, rather than Int
+-- Oct 8 2014: Adding more hacks for character and string constants
 {-| Finds optimal type for integer constant -}
 modifyConst :: SyntaxInfo -> FC -> PTerm -> PTerm
 modifyConst syn fc (PConstant (BI x))
@@ -434,7 +435,14 @@ modifyConst syn fc (PConstant (BI x))
                , PConstant (B32 (fromInteger x))
                , PConstant (B64 (fromInteger x))
                ]
+modifyConst syn fc x@(PConstant (Ch c))
+  | ord c > 255 = x
+  | otherwise = PAlternative False [x, PConstant (CCh c)]
+modifyConst syn fc x@(PConstant (Str s))
+  | any (\c -> ord c > 255) s = x
+  | otherwise = PAlternative False [x, PConstant (CStr s)]
 modifyConst syn fc x = x
+
 
 {- | Parses an alternative expression
 @
@@ -1126,8 +1134,10 @@ Constant ::=
 constant :: IdrisParser Idris.Core.TT.Const
 constant =  do reserved "Integer";      return (AType (ATInt ITBig))
         <|> do reserved "Int";          return (AType (ATInt ITNative))
-        <|> do reserved "Char";         return (AType (ATInt ITChar))
+        <|> do reserved "Char";         return CharType
+        <|> do reserved "CChar";        return (AType (ATInt ITCChar))
         <|> do reserved "Float";        return (AType ATFloat)
+        <|> do reserved "CString";      return CStrType
         <|> do reserved "String";       return StrType
         <|> do reserved "Ptr";          return PtrType
         <|> do reserved "ManagedPtr";   return ManagedPtrType
@@ -1146,6 +1156,7 @@ constant =  do reserved "Integer";      return (AType (ATInt ITBig))
         <|> do s <- stringLiteral;  return $ Str s
         <|> do c <- try charLiteral; return $ Ch c --Currently ambigous with symbols
         <?> "constant or literal"
+
 
 {- | Parses a verbatim multi-line string literal (triple-quoted)
 

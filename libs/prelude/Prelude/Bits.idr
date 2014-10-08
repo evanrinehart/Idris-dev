@@ -7,15 +7,20 @@ import Prelude.Bool
 %access public
 %default total
 
+ord : Char -> Int
+chr : Int -> Char
+
+addChar : Char -> Int -> Char
+addChar c n = chr ((ord c) + n)
 
 b8ToString : Bits8 -> String
 b8ToString c = pack (with List [c1, c2])
   where getDigit : Bits8 -> Char
         getDigit b = let n = prim__zextB8_Int b in
                      if n >= 0 && n <= 9
-                        then '0' `prim__addChar` cast n
+                        then addChar '0' n
                         else if n >= 10 && n <= 15
-                                then 'A' `prim__addChar` cast (n - 10)
+                                then addChar 'A' (n - 10)
                                 else '?' -- this is for totality - it should not happen
         c1 = getDigit (prim__andB8 (prim__lshrB8 c 4) 15)
         c2 = getDigit (prim__andB8 c 15)

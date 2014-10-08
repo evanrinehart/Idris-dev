@@ -129,8 +129,8 @@ instance Binary Const where
                 (AType (ATInt ITNative)) -> putWord8 9
                 (AType (ATInt ITBig)) -> putWord8 10
                 (AType ATFloat) -> putWord8 11
-                (AType (ATInt ITChar)) -> putWord8 12
-                StrType -> putWord8 13
+                (AType (ATInt ITCChar)) -> putWord8 12
+                CStrType -> putWord8 13
                 PtrType -> putWord8 14
                 Forgot -> putWord8 15
                 (AType (ATInt (ITFixed ity))) -> putWord8 (fromIntegral (16 + fromEnum ity)) -- 16-19 inclusive
@@ -145,6 +145,12 @@ instance Binary Const where
                 B64V x1 -> putWord8 24 >> put x1
                 BufferType -> putWord8 25
                 ManagedPtrType -> putWord8 26
+                StrType -> putWord8 27
+                CharType -> putWord8 28
+                CCh x1 -> do putWord8 29
+                             put x1
+                CStr x1 -> do putWord8 30
+                              put x1
         get
           = do i <- getWord8
                case i of
@@ -166,8 +172,8 @@ instance Binary Const where
                    9 -> return (AType (ATInt ITNative))
                    10 -> return (AType (ATInt ITBig))
                    11 -> return (AType ATFloat)
-                   12 -> return (AType (ATInt ITChar))
-                   13 -> return StrType
+                   12 -> return (AType (ATInt ITCChar))
+                   13 -> return CStrType
                    14 -> return PtrType
                    15 -> return Forgot
 
@@ -187,7 +193,10 @@ instance Binary Const where
                    24 -> fmap B64V get
                    25 -> return BufferType
                    26 -> return ManagedPtrType
-
+                   27 -> return StrType
+                   28 -> return CharType
+                   29 -> fmap CCh get
+                   30 -> fmap CStr get
                    _ -> error "Corrupted binary data for Const"
 
 

@@ -473,7 +473,7 @@ instance Pretty NativeTy OutputAnnotation where
     pretty IT32 = text "Bits32"
     pretty IT64 = text "Bits64"
 
-data IntTy = ITFixed NativeTy | ITNative | ITBig | ITChar
+data IntTy = ITFixed NativeTy | ITNative | ITBig | ITCChar
            | ITVec NativeTy Int
     deriving (Show, Eq, Ord)
 
@@ -481,7 +481,7 @@ intTyName :: IntTy -> String
 intTyName ITNative = "Int"
 intTyName ITBig = "BigInt"
 intTyName (ITFixed sized) = "B" ++ show (nativeTyWidth sized)
-intTyName (ITChar) = "Char"
+intTyName ITCChar = "CChar"
 intTyName (ITVec ity count) = "B" ++ show (nativeTyWidth ity) ++ "x" ++ show count
 
 data ArithTy = ATInt IntTy | ATFloat -- TODO: Float vectors
@@ -495,7 +495,7 @@ deriving instance NFData ArithTy
 instance Pretty ArithTy OutputAnnotation where
     pretty (ATInt ITNative) = text "Int"
     pretty (ATInt ITBig) = text "BigInt"
-    pretty (ATInt ITChar) = text "Char"
+    pretty (ATInt ITCChar) = text "CChar"
     pretty (ATInt (ITFixed n)) = pretty n
     pretty (ATInt (ITVec e c)) = pretty e <> text "x" <> (text . show $ c)
     pretty ATFloat = text "Float"
@@ -510,14 +510,15 @@ nativeTyWidth IT64 = 64
 intTyWidth :: IntTy -> Int
 intTyWidth (ITFixed n) = nativeTyWidth n
 intTyWidth ITNative = 8 * sizeOf (0 :: Int)
-intTyWidth ITChar = error "IRTS.Lang.intTyWidth: Characters have platform and backend dependent width"
+intTyWidth ITCChar = error "IRTS.Lang.intTyWidth: Characters have platform and backend dependent width"
 intTyWidth ITBig = error "IRTS.Lang.intTyWidth: Big integers have variable width"
 
-data Const = I Int | BI Integer | Fl Double | Ch Char | Str String
+data Const = I Int | BI Integer | Fl Double
+           | Ch Char | Str String | CCh Char | CStr String
            | B8 Word8 | B16 Word16 | B32 Word32 | B64 Word64
            | B8V (Vector Word8) | B16V (Vector Word16)
            | B32V (Vector Word32) | B64V (Vector Word64)
-           | AType ArithTy | StrType
+           | AType ArithTy | CharType | StrType | CStrType
            | PtrType | ManagedPtrType | BufferType | VoidType | Forgot
   deriving (Eq, Ord)
 {-!
@@ -534,8 +535,11 @@ instance Pretty Const OutputAnnotation where
   pretty (Fl f) = text . show $ f
   pretty (Ch c) = text . show $ c
   pretty (Str s) = text s
+  pretty (CCh c) = text . show $ c
+  pretty (CStr s) = text s
   pretty (AType a) = pretty a
   pretty StrType = text "String"
+  pretty CStrType = text "CString"
   pretty BufferType = text "prim__UnsafeBuffer"
   pretty PtrType = text "Ptr"
   pretty ManagedPtrType = text "Ptr"
@@ -553,6 +557,8 @@ constIsType (BI _) = False
 constIsType (Fl _) = False
 constIsType (Ch _) = False
 constIsType (Str _) = False
+constIsType (CCh _) = False
+constIsType (CStr _) = False
 constIsType (B8 _) = False
 constIsType (B16 _) = False
 constIsType (B32 _) = False
@@ -567,9 +573,11 @@ constIsType _ = True
 constDocs :: Const -> String
 constDocs c@(AType (ATInt ITBig))          = "Arbitrary-precision integers"
 constDocs c@(AType (ATInt ITNative))       = "Fixed-precision integers of undefined size"
-constDocs c@(AType (ATInt ITChar))         = "Characters in some unspecified encoding"
+constDocs c@(AType (ATInt ITCChar))        = "C-language chars"
 constDocs c@(AType ATFloat)                = "Double-precision floating-point numbers"
-constDocs StrType                          = "Strings in some unspecified encoding"
+constDocs CharType                         = "Unicode characters"
+constDocs StrType                          = "Unicode strings"
+constDocs CStrType                         = "Strings in some unspecified encoding"
 constDocs PtrType                          = "Foreign pointers"
 constDocs ManagedPtrType                   = "Managed pointers"
 constDocs BufferType                       = "Copy-on-write buffers"
@@ -586,6 +594,8 @@ constDocs (I i)                            = "A fixed-precision integer"
 constDocs (BI i)                           = "An arbitrary-precision integer"
 constDocs (Str s)                          = "A string of length " ++ show (length s)
 constDocs (Ch c)                           = "A character"
+constDocs (CStr s)                         = "A C string of length " ++ show (length s)
+constDocs (CCh c)                          = "A C char"
 constDocs (B8 w)                           = "The eight-bit value 0x" ++
                                              showIntAtBase 16 intToDigit w ""
 constDocs (B16 w)                          = "The sixteen-bit value 0x" ++
@@ -1185,6 +1195,8 @@ instance Show Const where
     show (Fl f) = show f
     show (Ch c) = show c
     show (Str s) = show s
+    show (CCh c) = show c
+    show (CStr s) = show s
     show (B8 x) = show x
     show (B16 x) = show x
     show (B32 x) = show x
@@ -1196,10 +1208,12 @@ instance Show Const where
     show (AType ATFloat) = "Float"
     show (AType (ATInt ITBig)) = "Integer"
     show (AType (ATInt ITNative)) = "Int"
-    show (AType (ATInt ITChar)) = "Char"
+    show (AType (ATInt ITCChar)) = "CChar"
     show (AType (ATInt (ITFixed it))) = itBitsName it
     show (AType (ATInt (ITVec it c))) = itBitsName it ++ "x" ++ show c
+    show CharType = "Char"
     show StrType = "String"
+    show CStrType = "CString"
     show BufferType = "prim__UnsafeBuffer"
     show PtrType = "Ptr"
     show ManagedPtrType = "ManagedPtr"

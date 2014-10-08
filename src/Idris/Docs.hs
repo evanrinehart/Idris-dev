@@ -203,5 +203,5 @@ pprintConstDocs ist c str = text "Primitive" <+> text (if constIsType c then "ty
   where t (Fl _)  = PConstant $ AType ATFloat
         t (BI _)  = PConstant $ AType (ATInt ITBig)
         t (Str _) = PConstant StrType
-        t (Ch c)  = PConstant $ AType (ATInt ITChar)
+        t (Ch c)  = PConstant CharType
         t _       = PType

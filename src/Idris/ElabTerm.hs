@@ -1688,7 +1688,7 @@ reifyIntTy :: Term -> ElabD IntTy
 reifyIntTy (App (P _ n _) nt) | n == reflm "ITFixed" = fmap ITFixed (reifyNativeTy nt)
 reifyIntTy (P _ n _) | n == reflm "ITNative" = return ITNative
 reifyIntTy (P _ n _) | n == reflm "ITBig" = return ITBig
-reifyIntTy (P _ n _) | n == reflm "ITChar" = return ITChar
+reifyIntTy (P _ n _) | n == reflm "ITCChar" = return ITCChar
 reifyIntTy (App (App (P _ n _) nt) (Constant (I i))) | n == reflm "ITVec" = fmap (flip ITVec i)
                                                                                  (reifyNativeTy nt)
 
@@ -1821,7 +1821,7 @@ reflectQuotePattern unq (App f x)
        focus f'; reflectQuotePattern unq f
        focus x'; reflectQuotePattern unq x
 reflectQuotePattern unq (Constant c)
-  = do fill $ reflCall "TConst" [reflectConstant c]
+  = do fill $ reflCall "TConst" [reflectConstant (trace (show c) c)]
        solve
 reflectQuotePattern unq (Proj t i)
   = do t' <- claimTT (sMN 0 "t"); movelast t'
@@ -1855,7 +1855,7 @@ reflectQuote unq (Bind n b x)
 reflectQuote unq (App f x)
   = reflCall "App" [reflectQuote unq f, reflectQuote unq x]
 reflectQuote unq (Constant c)
-  = reflCall "TConst" [reflectConstant c]
+  = reflCall "TConst" [reflectConstant (trace (show c) c)]
 reflectQuote unq (Proj t i)
   = reflCall "Proj" [reflectQuote unq t, RConstant (I i)]
 reflectQuote unq (Erased) = Var (reflm "Erased")
@@ -1945,6 +1945,8 @@ reflectConstant c@(BI _) = reflCall "BI" [RConstant c]
 reflectConstant c@(Fl _) = reflCall "Fl" [RConstant c]
 reflectConstant c@(Ch _) = reflCall "Ch" [RConstant c]
 reflectConstant c@(Str _) = reflCall "Str" [RConstant c]
+reflectConstant c@(CCh _) = reflCall "CCh" [RConstant c]
+reflectConstant c@(CStr _) = reflCall "CStr" [RConstant c]
 reflectConstant c@(B8 _) = reflCall "B8" [RConstant c]
 reflectConstant c@(B16 _) = reflCall "B16" [RConstant c]
 reflectConstant c@(B32 _) = reflCall "B32" [RConstant c]
@@ -1956,8 +1958,10 @@ reflectConstant (B64V ws) = reflCall "B8V" [mkList (Var (sUN "Bits64")) . map (R
 reflectConstant (AType (ATInt ITNative)) = reflCall "AType" [reflCall "ATInt" [Var (reflm "ITNative")]]
 reflectConstant (AType (ATInt ITBig)) = reflCall "AType" [reflCall "ATInt" [Var (reflm "ITBig")]]
 reflectConstant (AType ATFloat) = reflCall "AType" [Var (reflm "ATFloat")]
-reflectConstant (AType (ATInt ITChar)) = reflCall "AType" [reflCall "ATInt" [Var (reflm "ITChar")]]
+reflectConstant (AType (ATInt ITCChar)) = reflCall "AType" [reflCall "ATInt" [Var (reflm "ITCChar")]]
 reflectConstant StrType = Var (reflm "StrType")
+reflectConstant CharType = Var (reflm "CharType")
+reflectConstant CStrType = Var (reflm "CStrType")
 reflectConstant (AType (ATInt (ITFixed IT8)))  = reflCall "AType" [reflCall "ATInt" [reflCall "ITFixed" [Var (reflm "IT8")]]]
 reflectConstant (AType (ATInt (ITFixed IT16))) = reflCall "AType" [reflCall "ATInt" [reflCall "ITFixed" [Var (reflm "IT16")]]]
 reflectConstant (AType (ATInt (ITFixed IT32))) = reflCall "AType" [reflCall "ATInt" [reflCall "ITFixed" [Var (reflm "IT32")]]]

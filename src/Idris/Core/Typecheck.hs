@@ -7,6 +7,8 @@ import Control.Monad.State
 import Debug.Trace
 import qualified Data.Vector.Unboxed as V (length)
 
+import Data.Char
+
 import Idris.Core.TT
 import Idris.Core.Evaluate
 
@@ -117,8 +119,10 @@ check' holes ctxt env top = chk (TType (UVar (-5))) env top where
     where constType (I _)   = Constant (AType (ATInt ITNative))
           constType (BI _)  = Constant (AType (ATInt ITBig))
           constType (Fl _)  = Constant (AType ATFloat)
-          constType (Ch _)  = Constant (AType (ATInt ITChar))
-          constType (Str _) = Constant StrType
+          constType (Ch c)  = Constant CharType
+          constType (CCh c) = Constant (AType (ATInt ITCChar))
+          constType (Str cs) = Constant StrType
+          constType (CStr cs) = Constant CStrType
           constType (B8 _)  = Constant (AType (ATInt (ITFixed IT8)))
           constType (B16 _) = Constant (AType (ATInt (ITFixed IT16)))
           constType (B32 _) = Constant (AType (ATInt (ITFixed IT32)))

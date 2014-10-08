@@ -6,20 +6,20 @@ import System
 
 public
 Vars : Type
-Vars = List (String, String)
+Vars = List (CString, CString)
 
 record CGIInfo : Type where
        CGISt : (GET : Vars) ->
                (POST : Vars) ->
                (Cookies : Vars) ->
-               (UserAgent : String) ->
-               (Headers : String) ->
-               (Output : String) -> CGIInfo
+               (UserAgent : CString) ->
+               (Headers : CString) ->
+               (Output : CString) -> CGIInfo
 
-add_Headers : String -> CGIInfo -> CGIInfo
+add_Headers : CString -> CGIInfo -> CGIInfo
 add_Headers str st = record { Headers = Headers st ++ str } st
 
-add_Output : String -> CGIInfo -> CGIInfo
+add_Output : CString -> CGIInfo -> CGIInfo
 add_Output str st = record { Output = Output st ++ str } st
 
 abstract
@@ -57,7 +57,7 @@ lift op = MkCGI (\st => do { x <- op
                              return (x, st) } )
 
 abstract
-output : String -> CGI ()
+output : CString -> CGI ()
 output s = do i <- getInfo
               setInfo (add_Output s i)
 
@@ -77,15 +77,15 @@ cookieVars = do i <- getInfo
                 return (Cookies i)
 
 abstract
-queryVar : String -> CGI (Maybe String)
+queryVar : CString -> CGI (Maybe CString)
 queryVar x = do vs <- queryVars
                 return (lookup x vs)
 
-getOutput : CGI String
+getOutput : CGI CString
 getOutput = do i <- getInfo
                return (Output i)
 
-getHeaders : CGI String
+getHeaders : CGI CString
 getHeaders = do i <- getInfo
                 return (Headers i)
 
@@ -99,17 +99,17 @@ flush : CGI ()
 flush = do o <- getOutput
            lift (putStr o)
 
-getVars : List Char -> String -> List (String, String)
+getVars : List CChar -> CString -> List (CString, CString)
 getVars seps query = mapMaybe readVar (split (\x => elem x seps) query)
   where
-    readVar : String -> Maybe (String, String)
+    readVar : CString -> Maybe (CString, CString)
     readVar xs with (split (\x => x == '=') xs)
         | [k, v] = Just (trim k, trim v)
         | _      = Nothing
 
-getContent : Int -> IO String
+getContent : Int -> IO CString
 getContent x = getC (toNat x) "" where
-    getC : Nat -> String -> IO String
+    getC : Nat -> CString -> IO CString
     getC Z     acc = return $ reverse acc
     getC (S k) acc = do x <- getChar
                         getC k (strCons x acc)
@@ -123,11 +123,10 @@ abstract
 runCGI : CGI a -> IO a
 runCGI prog = do
     clen_in <- getCgiEnv "CONTENT_LENGTH"
-    let clen = prim__fromStrInt clen_in
-    content <- getContent clen
-    query   <- getCgiEnv "QUERY_STRING"
-    cookie  <- getCgiEnv "HTTP_COOKIE"
-    agent   <- getCgiEnv "HTTP_USER_AGENT"
+    content <- getContent (cast clen_in)
+    query   <- map utf8encode (getCgiEnv "QUERY_STRING")
+    cookie  <- map utf8encode (getCgiEnv "HTTP_COOKIE")
+    agent   <- map utf8encode (getCgiEnv "HTTP_USER_AGENT")
 
     let get_vars  = getVars ['&',';'] query
     let post_vars = getVars ['&'] content
@@ -136,8 +135,8 @@ runCGI prog = do
     (v, st) <- getAction prog (CGISt get_vars post_vars cookies agent
                  "Content-type: text/html\n"
                  "")
-    putStrLn (Headers st)
-    putStr (Output st)
+    (putStrLn . utf8decode' . Headers) st
+    (putStr . utf8decode' . Output) st
     return v
 
 

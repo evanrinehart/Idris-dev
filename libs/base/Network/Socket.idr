@@ -86,13 +86,13 @@ SocketDescriptor = Int
 
 data SocketAddress = IPv4Addr Int Int Int Int
                    | IPv6Addr -- Not implemented (yet)
-                   | Hostname String
+                   | Hostname CString
                    | InvalidAddress -- Used when there's a parse error
 
 instance Show SocketAddress where
   show (IPv4Addr i1 i2 i3 i4) = concat $ Prelude.List.intersperse "." (map show [i1, i2, i3, i4])
   show IPv6Addr = "NOT IMPLEMENTED YET"
-  show (Hostname host) = host
+  show (Hostname host) = cast host
   show InvalidAddress = "Invalid"
 
 Port : Type
@@ -111,7 +111,7 @@ record UDPRecvData : Type where
   MkUDPRecvData : 
     (remote_addr : SocketAddress) ->
     (remote_port : Port) ->
-    (recv_data : String) ->
+    (recv_data : CString) ->
     (data_len : Int) ->
     UDPRecvData
 
@@ -164,9 +164,13 @@ close : Socket -> IO ()
 close sock = mkForeign (FFun "close" [FInt] FUnit) (descriptor sock)
 
 private
-saString : (Maybe SocketAddress) -> String
-saString (Just sa) = show sa
+showSA : SocketAddress -> CString
+showSA sa = utf8encode (show sa)
+
+saString : (Maybe SocketAddress) -> CString
+saString (Just sa) = showSA sa
 saString Nothing = ""
+
 
 ||| Binds a socket to the given socket address and port.
 ||| Returns 0 on success, an error code otherwise.
@@ -183,7 +187,7 @@ bind sock addr port = do
 connect : Socket -> SocketAddress -> Port -> IO Int
 connect sock addr port = do
   conn_res <- (mkForeign (FFun "idrnet_connect" [FInt, FInt, FInt, FString, FInt] FInt)
-                           (descriptor sock) (toCode $ family sock) (toCode $ socketType sock) (show addr) port)
+                           (descriptor sock) (toCode $ family sock) (toCode $ socketType sock) (showSA addr) port)
   if conn_res == (-1) then
     getErrno
   else return 0
@@ -197,23 +201,23 @@ listen sock = do
   else return 0
 
 ||| Parses a textual representation of an IPv4 address into a SocketAddress
-parseIPv4 : String -> SocketAddress
+parseIPv4 : CString -> SocketAddress
 parseIPv4 str = case splitted of
                   (i1 :: i2 :: i3 :: i4 :: _) => IPv4Addr i1 i2 i3 i4
                   _ => InvalidAddress
-  where toInt' : String -> Integer
+  where toInt' : CString -> Integer
         toInt' = cast
-        toInt : String -> Int
+        toInt : CString -> Int
         toInt s = fromInteger $ toInt' s
         splitted : List Int
-        splitted = map toInt (Prelude.Strings.split (\c => c == '.') str)
+        splitted = map toInt (Prelude.CStrings.split (\c => c == '.') str)
 
 
 ||| Retrieves a socket address from a sockaddr pointer
 getSockAddr : SockaddrPtr -> IO SocketAddress
 getSockAddr (SAPtr ptr) = do
   addr_family_int <- mkForeign (FFun "idrnet_sockaddr_family" [FPtr] FInt) ptr
- -- putStrLn $ "Addr family int: " ++ (show addr_family_int)
+ -- putStrLn $ "Addr family int: " ++ (utf8encode (show addr_family_int))
   -- ASSUMPTION: Foreign call returns a valid int
   assert_total (case getSocketFamily addr_family_int of
     Just AF_INET => do
@@ -236,7 +240,7 @@ accept sock = do
     sockaddr_free (SAPtr sockaddr_ptr)
     return $ Right ((MkSocket accept_res fam ty p_num), sockaddr)
 
-send : Socket -> String -> IO (Either SocketError ByteLength)
+send : Socket -> CString -> IO (Either SocketError ByteLength)
 send sock dat = do
   send_res <- mkForeign (FFun "idrnet_send" [FInt, FString] FInt) (descriptor sock) dat
   if send_res == (-1) then
@@ -251,7 +255,7 @@ freeRecvStruct (RSPtr p) = mkForeign (FFun "idrnet_free_recv_struct" [FPtr] FUni
 freeRecvfromStruct : RecvfromStructPtr -> IO ()
 freeRecvfromStruct (RFPtr p) = mkForeign (FFun "idrnet_free_recvfrom_struct" [FPtr] FUnit) p
 
-recv : Socket -> Int -> IO (Either SocketError (String, ByteLength))
+recv : Socket -> Int -> IO (Either SocketError (CString, ByteLength))
 recv sock len = do
   -- Firstly make the request, get some kind of recv structure which
   -- contains the result of the recv and possibly the retrieved payload
@@ -288,10 +292,10 @@ recvBuf sock (BPtr ptr) len = do
   else
     return $ Right recv_res
 
-sendTo : Socket -> SocketAddress -> Port -> String -> IO (Either SocketError ByteLength)
+sendTo : Socket -> SocketAddress -> Port -> CString -> IO (Either SocketError ByteLength)
 sendTo sock addr p dat = do
   sendto_res <- mkForeign (FFun "idrnet_sendto" [FInt, FString, FString, FInt, FInt] FInt)
-                            (descriptor sock) dat (show addr) p (toCode $ family sock)
+                            (descriptor sock) dat (showSA addr) p (toCode $ family sock)
   if sendto_res == (-1) then
     map Left getErrno
   else
@@ -301,14 +305,14 @@ sendTo sock addr p dat = do
 sendToBuf : Socket -> SocketAddress -> Port -> BufPtr -> ByteLength -> IO (Either SocketError ByteLength)
 sendToBuf sock addr p (BPtr dat) len = do
   sendto_res <- mkForeign (FFun "idrnet_sendto_buf" [FInt, FPtr, FInt, FString, FInt, FInt] FInt)
-                            (descriptor sock) dat len (show addr) p (toCode $ family sock)
+                            (descriptor sock) dat len (showSA addr) p (toCode $ family sock)
   if sendto_res == (-1) then
     map Left getErrno
   else
     return $ Right sendto_res
 
 
-foreignGetRecvfromPayload : RecvfromStructPtr -> IO String
+foreignGetRecvfromPayload : RecvfromStructPtr -> IO CString
 foreignGetRecvfromPayload (RFPtr p) = mkForeign (FFun "idrnet_get_recvfrom_payload" [FPtr] FString) p
 
 foreignGetRecvfromAddr : RecvfromStructPtr -> IO SocketAddress
@@ -323,7 +327,7 @@ foreignGetRecvfromPort (RFPtr p) = do
   port <- mkForeign (FFun "idrnet_sockaddr_ipv4_port" [FPtr] FInt) sockaddr_ptr
   return port
 
-recvFrom : Socket -> ByteLength -> IO (Either SocketError (UDPAddrInfo, String, ByteLength))
+recvFrom : Socket -> ByteLength -> IO (Either SocketError (UDPAddrInfo, CString, ByteLength))
 recvFrom sock bl = do
   recv_ptr <- mkForeign (FFun "idrnet_recvfrom" [FInt, FInt] FPtr) 
                 (descriptor sock) bl

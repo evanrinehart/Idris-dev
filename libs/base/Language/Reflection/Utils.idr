@@ -84,7 +84,9 @@ instance Show Const where
   show (BI n)     = "(BI " ++ show n ++ ")"
   show (Fl f)     = "(Fl " ++ show f ++ ")"
   show (Ch c)     = "(Ch " ++ show c ++ ")"
+  show (CCh c)    = "(CCh " ++ show c ++ ")"
   show (Str str)  = "(Str " ++ show str ++ ")"
+  show (CStr str) = "(CStr " ++ show str ++ ")"
   show (B8 b)     = "(B8 ...)"
   show (B16 b)    = "(B16 ...)"
   show (B32 b)    = "(B32 ...)"
@@ -94,6 +96,7 @@ instance Show Const where
   show (B32V xs) = "(B32V ...)"
   show (B64V xs) = "(B64V ...)"
   show (AType x) = "(AType ...)"
+  show CharType = "CharType"
   show StrType = "StrType"
   show PtrType = "PtrType"
   show ManagedPtrType = "ManagedPtrType"
@@ -112,7 +115,7 @@ instance Eq Reflection.IntTy where
   (ITFixed x) == (ITFixed y) = x == y
   ITNative    == ITNative    = True
   ITBig       == ITBig       = True
-  ITChar      == ITChar      = True
+  ITCChar     == ITCChar     = True
   (ITVec x i) == (ITVec y j) = x == y && i == j
   _           == _           = False
 
@@ -126,7 +129,9 @@ instance Eq Const where
   (BI x)         == (BI y)          = x == y
   (Fl x)         == (Fl y)          = x == y
   (Ch x)         == (Ch y)          = x == y
+  (CCh x)        == (CCh y)         = x == y
   (Str x)        == (Str y)         = x == y
+  (CStr x)       == (CStr y)        = x == y
   (B8 x)         == (B8 y)          = x == y
   (B16 x)        == (B16 y)         = x == y
   (B32 x)        == (B32 y)         = x == y
@@ -136,6 +141,7 @@ instance Eq Const where
   (B32V xs)      == (B32V ys)       = False -- TODO
   (B64V xs)      == (B64V ys)       = False -- TODO
   (AType x)      == (AType y)       = x == y
+  CharType       == CharType        = True
   StrType        == StrType         = True
   PtrType        == PtrType         = True
   ManagedPtrType == ManagedPtrType  = True

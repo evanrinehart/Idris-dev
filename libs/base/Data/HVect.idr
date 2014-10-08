@@ -51,7 +51,7 @@ instance (Show t, Shows k ts) => Shows (S k) (t::ts) where
   shows (x::xs) = show x :: shows xs
 
 instance (Shows k ts) => Show (HVect ts) where
-  show xs = "[" ++ (pack . intercalate [','] . map unpack . toList $ shows xs) ++ "]"
+  show xs = "[" ++ join "," (toList (shows xs)) ++ "]"
 
 ||| Extract an arbitrary element of the correct type.
 ||| @ t the goal type

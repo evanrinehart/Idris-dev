@@ -54,7 +54,7 @@ instance NFData IntTy where
         rnf (ITFixed x1) = rnf x1 `seq` ()
         rnf ITNative = ()
         rnf ITBig = ()
-        rnf ITChar = ()
+        rnf ITCChar = ()
         rnf (ITVec x1 x2) = rnf x1 `seq` rnf x2 `seq` ()
 
 instance NFData NativeTy where

@@ -11,6 +11,7 @@ import Control.Applicative hiding (Const)
 import Control.Monad.State
 import Control.Monad.Reader
 import Data.Maybe
+import Data.Char
 import Data.List hiding (partition)
 import qualified Data.List(partition)
 import Debug.Trace
@@ -318,7 +319,9 @@ isType n t = False
 isConstType (I _) (AType (ATInt ITNative)) = True 
 isConstType (BI _) (AType (ATInt ITBig)) = True 
 isConstType (Fl _) (AType ATFloat) = True 
-isConstType (Ch _) (AType (ATInt ITChar)) = True 
+isConstType (CCh _) (AType (ATInt ITCChar)) = True
+isConstType (Ch _) CharType = True 
+isConstType (CStr _) CStrType = True
 isConstType (Str _) StrType = True 
 isConstType (B8 _) (AType (ATInt _)) = True 
 isConstType (B16 _) (AType (ATInt _)) = True 

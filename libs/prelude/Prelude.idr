@@ -15,8 +15,8 @@ import Prelude.Applicative
 import Prelude.Functor
 import Prelude.Either
 import Prelude.Vect
+import Prelude.CStrings
 import Prelude.Strings
-import Prelude.Chars
 import Prelude.Traversable
 import Prelude.Bits
 import Prelude.Stream
@@ -33,30 +33,33 @@ import Decidable.Equality
 class Show a where
     partial show : a -> String
 
+instance Show String where
+    show _ = "<<string show instance>>"
+
 instance Show Int where
-    show = prim__toStrInt
+    show = utf8decode' . prim__toStrInt
 
 instance Show Integer where
-    show = prim__toStrBigInt
+    show = utf8decode' . prim__toStrBigInt
 
 instance Show Float where
-    show = prim__floatToStr
+    show = utf8decode' . prim__floatToStr
 
-asciiTab : Vect 32 String
+asciiTab : Vect 32 CString
 asciiTab = ["NUL", "SOH", "STX", "ETX", "EOT", "ENQ", "ACK", "BEL",
             "BS",  "HT",  "LF",  "VT",  "FF",  "CR",  "SO",  "SI",
             "DLE", "DC1", "DC2", "DC3", "DC4", "NAK", "SYN", "ETB",
             "CAN", "EM",  "SUB", "ESC", "FS",  "GS",  "RS",  "US"]
 
-firstCharIs : (Char -> Bool) -> String -> Bool
+firstCharIs : (CChar -> Bool) -> CString -> Bool
 firstCharIs p s with (strM s)
   firstCharIs p ""             | StrNil = False
   firstCharIs p (strCons c cs) | StrCons c cs = p c
 
-protectEsc : (Char -> Bool) -> String -> String -> String
+protectEsc : (CChar -> Bool) -> CString -> CString -> CString
 protectEsc p f s = f ++ (if firstCharIs p s then "\\&" else "") ++ s
 
-showLitChar : Char -> String -> String
+showLitChar : CChar -> CString -> CString
 showLitChar '\a'   = ("\\a" ++)
 showLitChar '\b'   = ("\\b" ++)
 showLitChar '\f'   = ("\\f" ++)
@@ -70,20 +73,23 @@ showLitChar '\\'   = ("\\\\" ++)
 showLitChar c      = case (integerToFin (cast (cast {to=Int} c)) 32) of
                           Just k => strCons '\\' . ((index k asciiTab) ++)
                           Nothing => if (c > '\DEL')
-                                        then strCons '\\' . protectEsc isDigit (show (cast {to=Int} c))
+                                        then strCons '\\' . protectEsc isDigit (utf8encode (show (cast {to=Int} c)))
                                         else strCons c
 
-showLitString : List Char -> String -> String
+showLitString : List CChar -> CString -> CString
 showLitString []        = id
 showLitString ('"'::cs) = ("\\\"" ++) . showLitString cs
 showLitString (c  ::cs) = showLitChar c . showLitString cs
 
-instance Show Char where
+instance Show CChar where
   show '\'' = "'\\''"
-  show c    = strCons '\'' (showLitChar c "'")
+  show c    = utf8decode' (strCons '\'' (showLitChar c "'"))
 
-instance Show String where
-  show cs = strCons '"' (showLitString (cast cs) "\"")
+instance Show Char where
+  show _ = "<<Char show instance>>"
+
+instance Show CString where
+  show s = utf8decode' (strCons '"' (showLitString (unpack s) "\""))
 
 instance Show Nat where
     show n = show (the Integer (cast n))
@@ -130,7 +136,7 @@ viewB8x16 x = ( prim__indexB8x16 x (prim__truncBigInt_B32 0)
 instance Show Bits8x16 where
   show x =
     case viewB8x16 x of
-      (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) =>
+      (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) => utf8decode' $
         "<" ++ prim__toStrB8 a
         ++ ", " ++ prim__toStrB8 b
         ++ ", " ++ prim__toStrB8 c
@@ -164,7 +170,7 @@ viewB16x8 x = ( prim__indexB16x8 x (prim__truncBigInt_B32 0)
 instance Show Bits16x8 where
   show x =
     case viewB16x8 x of
-      (a, b, c, d, e, f, g, h) =>
+      (a, b, c, d, e, f, g, h) => utf8decode' $
         "<" ++ prim__toStrB16 a
         ++ ", " ++ prim__toStrB16 b
         ++ ", " ++ prim__toStrB16 c
@@ -186,7 +192,7 @@ viewB32x4 x = ( prim__indexB32x4 x (prim__truncBigInt_B32 0)
 instance Show Bits32x4 where
   show x =
     case viewB32x4 x of
-      (a, b, c, d) =>
+      (a, b, c, d) => utf8decode' $
         "<" ++ prim__toStrB32 a
         ++ ", " ++ prim__toStrB32 b
         ++ ", " ++ prim__toStrB32 c
@@ -202,7 +208,7 @@ viewB64x2 x = ( prim__indexB64x2 x (prim__truncBigInt_B32 0)
 instance Show Bits64x2 where
   show x =
     case viewB64x2 x of
-      (a, b) =>
+      (a, b) => utf8decode' $
         "<" ++ prim__toStrB64 a
         ++ ", " ++ prim__toStrB64 b
         ++ ">"
@@ -465,12 +471,12 @@ uniformB64x2 x = prim__mkB64x2 x x
 ||| Output a string to stdout without a trailing newline
 partial
 putStr : String -> IO ()
-putStr x = mkForeign (FFun "putStr" [FString] FUnit) x
+putStr s = putStr (utf8encode s)
 
 ||| Output a string to stdout with a trailing newline
 partial
 putStrLn : String -> IO ()
-putStrLn x = putStr (x ++ "\n")
+putStrLn s = putStr (utf8encode (s ++ "\n"))
 
 ||| Output something showable to stdout, with a trailing newline
 partial
@@ -480,16 +486,16 @@ print x = putStrLn (show x)
 ||| Read one line of input from stdin
 partial
 getLine : IO String
-getLine = prim_fread prim__stdin
+getLine = map utf8decode' getLine
 
 ||| Write a single character to stdout
 partial
-putChar : Char -> IO ()
+putChar : CChar -> IO ()
 putChar c = mkForeign (FFun "putchar" [FInt] FUnit) (cast c)
 
 ||| Read a single character from stdin
 partial
-getChar : IO Char
+getChar : IO CChar
 getChar = map cast $ mkForeign (FFun "getchar" [] FInt)
 
 ---- some basic file handling
@@ -511,14 +517,14 @@ partial stderr : File
 stderr = FHandle prim__stderr
 
 ||| Call the RTS's file opening function
-do_fopen : String -> String -> IO Ptr
+do_fopen : CString -> CString -> IO Ptr
 do_fopen f m
    = mkForeign (FFun "fileOpen" [FString, FString] FPtr) f m
 
 ||| Open a file
 ||| @ f the filename
 ||| @ m the mode as a String (`"r"`, `"w"`, or `"r+"`)
-fopen : (f : String) -> (m : String) -> IO File
+fopen : (f : CString) -> (m : CString) -> IO File
 fopen f m = do h <- do_fopen f m
                return (FHandle h)
 
@@ -530,7 +536,7 @@ data Mode = Read | Write | ReadWrite
 ||| @ m the mode
 partial
 openFile : (f : String) -> (m : Mode) -> IO File
-openFile f m = fopen f (modeStr m) where
+openFile f m = fopen (utf8encode f) (modeStr m) where
   modeStr Read  = "r"
   modeStr Write = "w"
   modeStr ReadWrite = "r+"
@@ -544,13 +550,13 @@ closeFile : File -> IO ()
 closeFile (FHandle h) = do_fclose h
 
 partial
-do_fread : Ptr -> IO String
+do_fread : Ptr -> IO CString
 do_fread h = prim_fread h
 
-fgetc : File -> IO Char
+fgetc : File -> IO CChar
 fgetc (FHandle h) = return (cast !(mkForeign (FFun "fgetc" [FPtr] FInt) h))
 
-fgetc' : File -> IO (Maybe Char)
+fgetc' : File -> IO (Maybe CChar)
 fgetc' (FHandle h)
    = do x <- mkForeign (FFun "fgetc" [FPtr] FInt) h
         if (x < 0) then return Nothing
@@ -559,10 +565,10 @@ fgetc' (FHandle h)
 fflush : File -> IO ()
 fflush (FHandle h) = mkForeign (FFun "fflush" [FPtr] FUnit) h
 
-do_popen : String -> String -> IO Ptr
+do_popen : CString -> CString -> IO Ptr
 do_popen f m = mkForeign (FFun "do_popen" [FString, FString] FPtr) f m
 
-popen : String -> Mode -> IO File
+popen : CString -> Mode -> IO File
 popen f m = do ptr <- do_popen f (modeStr m)
                return (FHandle ptr)
   where
@@ -577,16 +583,16 @@ pclose (FHandle h) = mkForeign (FFun "pclose" [FPtr] FUnit) h
 --                        prim__vm h
 
 partial
-fread : File -> IO String
+fread : File -> IO CString
 fread (FHandle h) = do_fread h
 
 partial
-do_fwrite : Ptr -> String -> IO ()
+do_fwrite : Ptr -> CString -> IO ()
 do_fwrite h s
    = mkForeign (FFun "fputStr" [FPtr, FString] FUnit) h s
 
 partial
-fwrite : File -> String -> IO ()
+fwrite : File -> CString -> IO ()
 fwrite (FHandle h) s = do_fwrite h s
 
 partial
@@ -618,7 +624,7 @@ nullPtr p = do ok <- mkForeign (FFun "isNull" [FPtr] FInt) p
 
 ||| Check if a supposed string was actually a null pointer
 partial
-nullStr : String -> IO Bool
+nullStr : CString -> IO Bool
 nullStr p = do ok <- mkForeign (FFun "isNull" [FString] FInt) p
                return (ok /= 0)
 
@@ -650,12 +656,13 @@ readFile : String -> IO String
 readFile fn = do h <- openFile fn Read
                  c <- readFile' h ""
                  closeFile h
-                 return c
+                 return (utf8decode' c)
   where
     partial
-    readFile' : File -> String -> IO String
+    readFile' : File -> CString -> IO CString
     readFile' h contents =
        do x <- feof h
           if not x then do l <- fread h
                            readFile' h (contents ++ l)
                    else return contents
+

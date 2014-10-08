@@ -33,7 +33,7 @@ prim_io_return : a -> PrimIO a
 prim_io_return x = prim__IO x
 
 ||| Descriptions of the various sorts of Ints that Idris supports
-data IntTy = ITChar | ITNative | IT8 | IT16 | IT32 | IT64 | IT8x16 | IT16x8 | IT32x4 | IT64x2
+data IntTy = ITCChar | ITNative | IT8 | IT16 | IT32 | IT64 | IT8x16 | IT16x8 | IT32x4 | IT64x2
 
 ||| Types available for foreign function calls
 data FTy = FIntT IntTy
@@ -49,7 +49,7 @@ FInt : FTy
 FInt = FIntT ITNative
 
 FChar : FTy
-FChar = FIntT ITChar
+FChar = FIntT ITCChar
 
 FByte : FTy
 FByte = FIntT IT8
@@ -87,14 +87,14 @@ FBits64x2 = FIntT IT64x2
 ||| Interpret an FFI type as the type of the Idris function that it will become
 interpFTy : FTy -> Type
 interpFTy (FIntT ITNative) = Int
-interpFTy (FIntT ITChar)   = Char
+interpFTy (FIntT ITCChar)  = CChar
 interpFTy (FIntT IT8)      = Bits8
 interpFTy (FIntT IT16)     = Bits16
 interpFTy (FIntT IT32)     = Bits32
 interpFTy (FIntT IT64)     = Bits64
 interpFTy (FAny t)         = t
 interpFTy FFloat           = Float
-interpFTy FString          = String
+interpFTy FString          = CString
 interpFTy FPtr             = Ptr
 interpFTy FManagedPtr      = ManagedPtr
 interpFTy (FIntT IT8x16)   = Bits8x16
@@ -156,7 +156,7 @@ fork (MkIO f) = MkIO (\w => prim_io_bind
                               (\x => prim_io_return x))
 
 partial
-prim_fread : Ptr -> IO String
+prim_fread : Ptr -> IO CString
 prim_fread h = MkIO (\w => prim_io_return (prim__readString h))
 
 unsafePerformIO : IO a -> a

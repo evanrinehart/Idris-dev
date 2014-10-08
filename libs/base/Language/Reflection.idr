@@ -28,17 +28,18 @@ data TTUExp =
 
 data NativeTy = IT8 | IT16 | IT32 | IT64
 
-data IntTy = ITFixed NativeTy | ITNative | ITBig | ITChar
+data IntTy = ITFixed NativeTy | ITNative | ITBig | ITCChar
            | ITVec NativeTy Int
 
 data ArithTy = ATInt Language.Reflection.IntTy | ATFloat
 
 ||| Primitive constants
-data Const = I Int | BI Integer | Fl Float | Ch Char | Str String
+data Const = I Int | BI Integer | Fl Float
+           | Ch Char | Str String | CCh CChar | CStr CString
            | B8 Bits8 | B16 Bits16 | B32 Bits32 | B64 Bits64
            | B8V Bits8x16 | B16V Bits16x8
            | B32V Bits32x4 | B64V Bits64x2
-           | AType ArithTy | StrType
+           | AType ArithTy | CharType | StrType | CStrType
            | PtrType | ManagedPtrType | BufferType | VoidType | Forgot
 
 %name Const c, c'
@@ -58,8 +59,14 @@ instance ReflConst Float where
 instance ReflConst Char where
    toConst = Ch
 
+instance ReflConst CChar where
+   toConst = CCh
+
 instance ReflConst String where
    toConst = Str
+
+instance ReflConst CString where
+   toConst = CStr
 
 instance ReflConst Bits8 where
    toConst = B8
@@ -274,6 +281,10 @@ instance Quotable Float where
   quotedTy = `(Float)
   quote x = TConst (Fl x)
 
+instance Quotable CChar where
+  quotedTy = `(CChar)
+  quote x = TConst (CCh x)
+
 instance Quotable Char where
   quotedTy = `(Char)
   quote x = TConst (Ch x)
@@ -318,6 +329,10 @@ instance Quotable String where
   quotedTy = `(String)
   quote x = TConst (Str x)
 
+instance Quotable CString where
+  quotedTy = `(CString)
+  quote x = TConst (CStr x)
+
 instance Quotable NameType where
   quotedTy = `(NameType)
   quote Bound = `(Bound)
@@ -349,7 +364,7 @@ instance Quotable Reflection.IntTy where
   quote (ITFixed x) = `(ITFixed ~(quote x))
   quote ITNative = `(Reflection.ITNative)
   quote ITBig = `(ITBig)
-  quote ITChar = `(Reflection.ITChar)
+  quote ITCChar = `(Reflection.ITCChar)
   quote (ITVec x y) = `(ITVec ~(quote x) ~(quote y))
 
 instance Quotable ArithTy where
@@ -364,6 +379,8 @@ instance Quotable Const where
   quote (Fl x) = `(Fl ~(quote x))
   quote (Ch x) = `(Ch ~(quote x))
   quote (Str x) = `(Str ~(quote x))
+  quote (CCh x) = `(CCh ~(quote x))
+  quote (CStr x) = `(CStr ~(quote x))
   quote (B8 x) = `(B8 ~(quote x))
   quote (B16 x) = `(B16 ~(quote x))
   quote (B32 x) = `(B32 ~(quote x))
@@ -373,7 +390,9 @@ instance Quotable Const where
   quote (B32V xs) = `(B32V ~(quote xs))
   quote (B64V xs) = `(B64V ~(quote xs))
   quote (AType x) = `(AType ~(quote x))
+  quote CharType = `(CharType)
   quote StrType = `(StrType)
+  quote CStrType = `(CStrType)
   quote PtrType = `(PtrType)
   quote ManagedPtrType = `(ManagedPtrType)
   quote BufferType = `(BufferType)
