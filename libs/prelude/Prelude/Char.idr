@@ -1,4 +1,4 @@
-module Prelude.Chars
+module Prelude.Char
 
 ord : Char -> Int
 ord c = 99

@@ -1,4 +1,4 @@
-module Prelude.CChars
+module Prelude.CChar
 -- Functions operating over CChars
 
 import Prelude.Bool

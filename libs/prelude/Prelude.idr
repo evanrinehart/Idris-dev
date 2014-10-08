@@ -15,13 +15,14 @@ import Prelude.Applicative
 import Prelude.Functor
 import Prelude.Either
 import Prelude.Vect
-import Prelude.CStrings
 import Prelude.Strings
 import Prelude.Traversable
 import Prelude.Bits
 import Prelude.Stream
 import Prelude.Uninhabited
 import Prelude.Pairs
+
+import Prelude.CString
 
 import Decidable.Equality
 

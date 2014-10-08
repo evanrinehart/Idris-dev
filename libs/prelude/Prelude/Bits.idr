@@ -1,7 +1,7 @@
 module Prelude.Bits
 
 import Prelude.Strings
-import Prelude.Chars
+import Prelude.Char
 import Prelude.Vect
 import Prelude.Bool
 

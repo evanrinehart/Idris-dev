@@ -1,10 +1,10 @@
-module Prelude.CStrings
+module Prelude.CString
 
 import Builtins
 import IO
 
 import Prelude.List
-import Prelude.CChars
+import Prelude.CChar
 import Prelude.Cast
 import Prelude.Either
 import Prelude.Foldable
