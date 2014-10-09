@@ -2,16 +2,18 @@ module Prelude.Strings
 
 import Prelude.List
 
+-- "super primitive"
+
 -- "primitive operations"
 
 ||| The length-1 string of that character.
 singleton : Char -> String
-singleton c = "c" --PRIMITIVE
+singleton c = pack [c]
 
 ||| If the string is not empty give the first character and the rest of the string.
 uncons : String -> Maybe (Char, String)
-uncons _ = ?needsToReturnSmallerResult
 --uncons _ = Just ('?', "<<uncons impl>>") --PRIMITIVE
+uncons = ?missingUnconsPrim
 
 ||| Concatenate a list of strings interspersing some string between each piece.
 join : String -> List String -> String
@@ -30,7 +32,6 @@ splitAt i s = Just ("<<split at", "impl>>")
 ||| the string starting with the match.
 breakOn : (needle : String) -> (haystack : String) -> Maybe (String, String)
 breakOn needle s = Just ("<<breakOn", " impl>>")
-
 
 
 -- "library operations"

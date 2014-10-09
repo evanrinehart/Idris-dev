@@ -25,7 +25,7 @@
 typedef enum {
     CON, INT, BIGINT, FLOAT, STRING, STROFFSET,
     BITS8, BITS16, BITS32, BITS64, UNIT, PTR, FWD,
-    MANAGEDPTR, BUFFER
+    MANAGEDPTR, BUFFER, USTRING, USTORAGE
 } ClosureType;
 
 typedef struct Closure *VAL;
@@ -54,6 +54,19 @@ typedef struct {
     void* data;
 } ManagedPtr;
 
+// Storage cell for String data, should be the only reference to the data
+typedef struct {
+  unsigned char store[];
+  size_t byte_count;
+  size_t char_count;
+} UStringStorage;
+
+typedef struct {
+  VAL* storage;
+  size_t offset;
+  size_t char_count;
+} UString;
+
 typedef struct Closure {
 // Use top 16 bits of ty for saying which heap value is in
 // Bottom 16 bits for closure type
@@ -74,6 +87,8 @@ typedef struct Closure {
         uint64_t bits64;
         Buffer* buf;
         ManagedPtr* mptr;
+        UString* ustr;
+        UStringStorage* ustorage;
     } info;
 } Closure;
 
@@ -260,7 +275,7 @@ uint8_t idris_peek(void* ptr, i_int offset);
 void idris_poke(void* ptr, i_int offset, uint8_t data);
 void idris_memmove(void* dest, void* src, i_int dest_offset, i_int src_offset, i_int size);
 
-// String primitives
+// CString primitives
 
 VAL idris_concat(VM* vm, VAL l, VAL r);
 VAL idris_strlt(VM* vm, VAL l, VAL r);
@@ -273,6 +288,16 @@ VAL idris_strTail(VM* vm, VAL str);
 VAL idris_strCons(VM* vm, VAL x, VAL xs);
 VAL idris_strIndex(VM* vm, VAL str, VAL i);
 VAL idris_strRev(VM* vm, VAL str);
+
+// String primitives
+
+// length
+// pack
+// uncons
+// join
+// reverse
+// breakOn
+// splitAt
 
 // Buffer primitives
 VAL idris_allocate(VM* vm, VAL hint);
@@ -297,6 +322,10 @@ VAL idris_peekB32BE(VM* vm, VAL buf, VAL off);
 VAL idris_peekB64Native(VM* vm, VAL buf, VAL off);
 VAL idris_peekB64LE(VM* vm, VAL buf, VAL off);
 VAL idris_peekB64BE(VM* vm, VAL buf, VAL off);
+
+// Global static values
+extern UString __idris_emptyUStr;      // will be initialized with zeros, {NULL, 0, 0}
+
 
 // system infox
 // used indices:

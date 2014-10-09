@@ -78,6 +78,9 @@ data PrimFn = LPlus ArithTy | LMinus ArithTy | LTimes ArithTy
             | LNullPtr
             | LRegisterPtr
             | LNoOp
+
+            -- new String primitive operations
+            -- | LStringUncons | LStringPack | LStringLength | LStringReverse -- ...
   deriving (Show, Eq)
 
 -- Supported target languages for foreign calls
