@@ -23,9 +23,9 @@
 // Closures
 
 typedef enum {
-    CON, INT, BIGINT, FLOAT, STRING, STROFFSET,
+    CON, INT, BIGINT, FLOAT, STRING,
     BITS8, BITS16, BITS32, BITS64, UNIT, PTR, FWD,
-    MANAGEDPTR, BUFFER, USTRING, USTORAGE
+    MANAGEDPTR, BUFFER, USTRING, STORAGE
 } ClosureType;
 
 typedef struct Closure *VAL;
@@ -35,18 +35,6 @@ typedef struct {
     VAL args[];
 } con;
 
-typedef struct {
-    VAL str;
-    size_t offset;
-} StrOffset;
-
-typedef struct {
-    // If we ever have multithreaded access to the same heap,
-    // fill is mutable so needs synchronization!
-    size_t fill;
-    size_t cap;
-    unsigned char store[];
-} Buffer;
 
 // A foreign pointer, managed by the idris GC
 typedef struct {
@@ -54,18 +42,26 @@ typedef struct {
     void* data;
 } ManagedPtr;
 
-// Storage cell for String data, should be the only reference to the data
+// Storage cell for raw data, should be the only reference to the store
 typedef struct {
   unsigned char store[];
-  size_t byte_count;
-  size_t char_count;
-} UStringStorage;
+  size_t size;
+} Storage;
 
+// Unicode string view backed by Storage, to support String
 typedef struct {
-  VAL* storage;
+  VAL storage;
   size_t offset;
   size_t char_count;
-} UString;
+  size_t byte_count;
+} String;
+
+// Buffer view for CString (STRING) and Buffer (BUFFER)
+typedef struct {
+  VAL storage;
+  size_t offset;
+  size_t size;
+} Buffer;
 
 typedef struct Closure {
 // Use top 16 bits of ty for saying which heap value is in
@@ -79,16 +75,15 @@ typedef struct Closure {
         int i;
         double f;
         char* str;
-        StrOffset* str_offset;
         void* ptr;
         uint8_t bits8;
         uint16_t bits16;
         uint32_t bits32;
         uint64_t bits64;
-        Buffer* buf;
         ManagedPtr* mptr;
-        UString* ustr;
-        UStringStorage* ustorage;
+        Buffer* buf;
+        String* ustr;
+        Storage* storage;
     } info;
 } Closure;
 
@@ -323,8 +318,16 @@ VAL idris_peekB64Native(VM* vm, VAL buf, VAL off);
 VAL idris_peekB64LE(VM* vm, VAL buf, VAL off);
 VAL idris_peekB64BE(VM* vm, VAL buf, VAL off);
 
+// New buffer primitives
+VAL idris_bufferNew(VM* vm, VAL size);
+VAL idris_bufferSize(VM* vm, VAL buffer);
+VAL idris_bufferPeek(VM* vm, VAL i, VAL buffer);
+VAL idris_bufferPoke(VM* vm, VAL i, VAL v, VAL buffer);
+VAL idris_bufferSlice(VM* vm, VAL i0, VAL i1, VAL buffer);
+
 // Global static values
-extern UString __idris_emptyUStr;      // will be initialized with zeros, {NULL, 0, 0}
+extern String __idris_emptyStr;    // {NULL, 0, 0, 0}
+extern Buffer __idris_emptyBuffer; // {NULL, 0, 0}
 
 
 // system infox
