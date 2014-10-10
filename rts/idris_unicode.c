@@ -4,193 +4,225 @@
 Implementation of primitive String operations in C
 */
 
-int utf8_encode_char(int uchar, int* size, char (*out)[4]);
-int utf8_decode_char(char bytes[4], int* uchar);
+/* need to implement following
+VAL idris_stringCons(VM* vm, VAL c, VAL str);            CHECK
+VAL idris_stringAppend(VM* vm, VAL str1, VAL str2);
+VAL idris_stringUnsafeHead(VM* vm, VAL str);             CHECK
+VAL idris_stringUnsafeTail(VM* vm, VAL str);
+VAL idris_stringLength(VM* vm, VAL str);                 CHECK
+VAL idris_stringReverse(VM* vm, VAL str);
+VAL idris_stringSlice(VM* vm, VAL i0, VAL i1, VAL str);
+VAL idris_stringCompare(VM* vm, VAL str1, VAL str2);
 
-VAL allocateStringStorage(VM* vm, size_t byte_count, size_t char_count);
-VAL allocateString(VM* vm, VAL storage, size_t offset, size_t char_count);
+*/
 
+int utf8_encode_char(int uchar, int* size, unsigned char (*out)[4]);
+int utf8_decode_char(char bytes[4], int* uchar, int* size);
 
-/* fill in a Closure with the empty string */
-void idris_setEmptyString(VAL out){
-  SETTY(out, USTRING);
-  out->info.ustr = __idris_emptyUStr;
-}
+VAL idris_stringCons(VM* vm, VAL c, VAL str){
+  unsigned char utf8[4];
+  int encoded_char_size;
 
-/* allocate a new empty string VAL */
-VAL idris_allocateEmptyString(VM* vm){
-  VAL cl = allocate(vm, sizeof(Closure), 0);
-  idris_setEmptyString(cl);
-  return cl;
-}
+  int ret = utf8_encode_char(c->info.i, &encoded_char_size, utf8);
+  if(ret < 0) exit(-1); /* crash on bad codepoint */
 
-/* allocate storage for raw string data */
-VAL allocateStringStorage(VM* vm, size_t byte_count, size_t char_count){
-    VAL cl;
-    unsigned char* store;
-    UStringStorage* storage;
+  int store_size;
+  int offset;
+  int total_allocation;
+  String string;
+  Storage storage;
+  VAR string_cl;
+  VAR storage_cl;
 
-    /* allocating three things here, we don't want 2 or 3 to cause 1 or 2 to move */
-    idris_requireAlloc(vm, byte_count + sizeof(Closure) + sizeof(UStringStorage));
-      store = allocate(vm, byte_count, 0);
-      storage = allocate(vm, sizeof(UStringStorage), 0);
-      cl = allocate(vm, sizeof(Closure), 0);
+  if(str == NULL){ /* empty string, so allocate new singleton string */
+    /* allocate storage of at least 8 bytes to put a single char of up to 4 bytes */
+    /* put it somewhere in the middle of the region */
+    store_size = next_power_of_two(encoded_char_size);
+    store_size = store_size < 8 ? 8 : store_size;
+    offset = store_size / 2;
+    total_allocation = 
+      sizeof(Closure) + sizeof(String) +
+      sizeof(Closure) + sizeof(Storage) + store_size;
+
+    idris_requireAlloc(vm, total_allocation);
+
+      new_store = allocate(vm, store_size*sizeof(unsigned char), 0);
+      memcpy(utf8, new_store+offset, encoded_char_size);
+
+      storage = allocate(vm, sizeof(Storage), 0);
+      storage->store = new_store;
+      storage->size = store_size;
+      storage->lower_bound = offset;
+      storage->upper_bound = offset + encoded_char_size - 1;
+
+      storage_cl = allocate(vm, sizeof(Closure), 0);
+      SETTY(cl, STORAGE);
+      storage_cl->info.storage = storage;
+
+      string = allocate(vm, sizeof(String), 0);
+      string->storage = storage_cl;
+      string->offset = offset;
+      string->byte_count = encoded_char_size;
+      string->char_count = 1;
+
+      string_cl = allocate(vm, sizeof(Closure), 0);
+      SETTY(cl, STRING);
+      string_cl->info.string = string;
+
     idris_doneAlloc(vm);
 
-    storage->store = store;
-    storage->byte_count = byte_count;
-    starage->char_count = char_count;
+    return string_cl;
+  }
+  else if(str->info.string->offset - encoded_char_size < str->info.string->storage->info.storage->lower_bound){ /* there is room in the storage for the character, use it */
 
-    SETTY(cl, USTORAGE);
-    cl->info.ustorage = storage;
-    return cl;
+    memcpy(utf8, str->info.string->storage->info.storage->store - encoded_char_size, encoded_char_size);
+    str->info.string->storage->info.storage->lower_bound -= encoded_char_size;
+
+    idris_requireAlloc(vm, sizeof(String) + sizeof(Closure));
+
+      string = allocate(vm, sizeof(String), 0);
+      string->storage = str->info.string->storage;
+      string->offset = str->info.string->offset - encoded_char_size;
+      string->byte_count = str->info.string->byte_count + encoded_char_size;
+      string->char_count = str->info.string->char_count + 1;
+
+      string_cl = allocate(vm, sizeof(Closure), 0);
+      SETTY(cl, STRING);
+      string_cl->info.string = string;
+
+    idris_doneAlloc(vm);
+
+    return string_cl;
+  }
+  else{ /* can't put char in existing storage without going out of bounds or clobbering something important, so copy into a new expanded region */
+
+    string_size = str->info.string->byte_count + encoded_char_size;
+    store_size = next_power_of_two(string_size);
+    store_size = store_size < 8 ? 8 : store_size;
+    offset = store_size - string_size / 2;
+    total_allocation = 
+      sizeof(Closure) + sizeof(String) +
+      sizeof(Closure) + sizeof(Storage) + store_size;
+
+    idris_requireAlloc(vm, total_allocation);
+
+      new_store = allocate(vm, store_size*sizeof(unsigned char), 0);
+      memcpy(utf8, new_store+offset, encoded_char_size);
+      memcpy(
+        str->info.string->storage->info.storage->store + str->info.string->offset,
+        new_store + offset + encoded_char_size,
+        str->info.string->byte_count
+      );
+
+      storage = allocate(vm, sizeof(Storage), 0);
+      storage->store = new_store;
+      storage->size = store_size;
+      storage->lower_bound = offset;
+      storage->upper_bound = offset + string_size - 1;
+
+      storage_cl = allocate(vm, sizeof(Closure), 0);
+      SETTY(cl, STORAGE);
+      storage_cl->info.storage = storage;
+
+      string = allocate(vm, sizeof(String), 0);
+      string->storage = storage_cl;
+      string->offset = offset;
+      string->byte_count = string_size;
+      string->char_count = str->info.string->char_count + 1;
+
+      string_cl = allocate(vm, sizeof(Closure), 0);
+      SETTY(cl, STRING);
+      string_cl->info.string = string;
+
+    idris_doneAlloc(vm);
+
+    return string_cl;
+  }
+
 }
 
-/* allocate a new string VAL */
-VAL allocateString(VM* vm, VAL orig_storage, size_t offset, size_t char_count){
-  VAL cl;
-  UString* str;
-  VAL storage = orig_storage;
+VAL idris_stringAppend(VM* vm, VAL str1, VAL str2){
+  /*
+try to copy str1 into the prefix of str2's storage
+if not, try to copy str2 into str1's storage suffix
+if not, allocate new storage to hold the result and memcpy str1 and str2 into it
+  */
 
-  /* allocating two things here, we don't want the second one to cause the first to move */
-  idris_requireAlloc(vm, sizeof(Closure) + sizeof(UString));
-    cl = allocate(vm, sizeof(Closure), 0);
-    str = allocate(vm, sizeof(UString), 0);
-  idris_doneAlloc(vm);
-  
-  /* and str needs to point to storage, which may have moved in response to allocation */
-  if(orig_storage->ty == FWD) storage = orig_storage->info.ptr;
-
-  str->storage = storage;
-  str->offset = offset;
-  str->char_count = char_count;
-
-  SETTY(cl, USTRING);
-  cl->info.ustr = str;
-  
-  return cl;
+  return NULL;
 }
 
+VAL idris_stringUnsafeHead(VM* vm, VAL str){
+  if(str == NULL){
+    fprintf(stderr, "stringUnsafeHead: empty string\n");
+    exit(-1);
+  }
+  else{
+    int c;
+    int size;
 
+    int ret = utf8_decode_char(str->info.string->storage->info.storage->store + str->info.string->offset, &c, &size);
 
-
-/* utf8 encode a list of character codepoints into preallocated buffer */
-/* returns -1 on error, 0 otherwise */
-int idris_stringPack(VAL uchars, unsigned char out[]){
-  unsigned char* optr = out;
-  unsigned char utf8[4] = {0,0,0,0};
-  VAL vptr = uchars;
-  int size = 0;
-
-  do {
-    if(CARITY(vptr) == 0) return 0; // end of list reached
-
-    if(utf8_encode_char(GETARG(vptr,0)->info.i, &size, utf8) < 0) return -1; // bad codepoint
-
-    if(size == 1){
-      optr[0] = utf8[0];
-      optr += 1;
-    }
-    else if(size == 2){
-      optr[0] = utf8[0];
-      optr[1] = utf8[1];
-      optr += 2;
-    }
-    else if(size == 3){
-      optr[0] = utf8[0];
-      optr[1] = utf8[1];
-      optr[2] = utf8[2];
-      optr += 3;
-    }
-    else if(size == 4){
-      optr[0] = utf8[0];
-      optr[1] = utf8[1];
-      optr[2] = utf8[2];
-      optr[3] = utf8[3];
-      optr += 4;
-    }
-    else{
-      fprintf(stderr, "idris_stringPack impossible case encountered, size = %d\n", size);
+    if(ret < 0){
+      fprintf(stderr, "stringUnsafeHead: invalid utf8\n");
       exit(-1);
     }
 
-    vptr = GETARG(vptr,1);
-
-    #ifdef DEBUG
-    /* check that vptr points to a list node or empty list */
-    #endif
-
-  } while(1); // terminates only if passed a valid (acyclic) linked list
+    return MKINT(c);
+  }
 }
 
-
-
-/* decompose the string into a char and allocate a new view of the tail */
-/* crash if the strings storage contains invalid utf8 */
-/* return -1 if string is empty */
-int idris_stringUncons(VM* vm, VAL str, int* uchar, VAL* tail){
-  int head;
-  int size;
-  int err;
-  VAL cl;
-
-  if(idris_stringLength(str) == 0) return -1;
-
-  err = utf8_decode_char(str->info.ustr->str->info.str, &head, &size);
-  if(err < 0){
-    fprintf(stderr, "idris_stringUncons encountered invalid utf8\n");
+VAL idris_stringUnsafeTail(VM* vm, VAL str){
+  if(str == NULL){ /* unsafeTail on "" is an error */
+    fprintf(stderr, "stringUnsafeTail: empty string\n");
     exit(-1);
   }
-
-  if(idris_stringLength(str) == 1){
-    cl = idris_allocateEmptyString(vm);
+  else if(str->info.string->char_count == 1){ /* unsafeTail on singleton is "" */
+    return NULL;
   }
   else{
-    cl = allocateString(
-      VM* vm,
-      str->info.ustr->storage,
-      str->info.ustr->offset + size,
-      str->info.ustr->char_count - 1
-    );
+    int c;
+    int size;
+
+    int ret = utf8_decode_char(str->info.string->storage->info.storage->store + str->info.string->offset, &c, &size);
+
+    if(ret < 0){
+      fprintf(stderr, "stringUnsafeTail: invalid utf8\n");
+      exit(-1);
+    }
+
+    /* TODO */
+    /* allocate a string slice into str's storage */
+    return NULL;
   }
-
-  *uchar = head;
-  *tail = cl;
-  return 0;
 }
 
-/* join a list of strings separated by string delim into preallocated buffer */
-void idris_stringJoin(VAL delim, VAL strs, VAL out){
+VAL idris_stringLength(VM* vm, VAL str){
+  return MKINT(str ? str->info.string->char_count : 0);
 }
 
-/* reverse a string into a preallocated buffer */
-void idris_stringReverse(VAL str, VAL out){
+VAL idris_stringReverse(VM* vm, VAL str){
+  if(str == NULL) return NULL;
+
+  /* allocate space for a reversal,
+     traverse the string and encode the characters backwards in the new storage */
 }
 
-/* if string needle is not found in string haystiack return -1 */
-/* else allocate two views into the haystack split at first occurrence and return 0 */
-/*   one is the prefix ending just before the needle */
-/*   two is the rest of the string starting with needle */
-int idris_stringBreakOn(VAL needle, VAL haystack, VAL* out1, VAL* out2){
-  return -1;
+VAL idris_stringSlice(VM* vm, VAL i0, VAL i1, VAL str){
+  if(str == NULL) return NULL;
+  /* this should clamp if the indexes are out of range */
 }
 
-/* if i >= length of string return -1 */
-/* else allocate two views into str split at index i */
-int idris_stringSplitAt(int i, VAL str, VAL* out1, VAL* out2){
-  return -1;
-}
-
-/* return number char count of the string */
-int idris_stringLength(VAL str){
-  return str->info.ustr->char_count;
+VAL idris_stringCompare(VM* vm, VAL str1, VAL str2){
+  if(str1 == NULL && str2 == NULL) return MKINT(0);
+  if(str1 == NULL) return MKINT(-1);
+  if(str2 == NULL) return MKINT(1);
+  /* compare byte-by-byte */
 }
 
 
+/********** dont look down */
 
-
-
-/* write a utf8 byte sequence for character uchar and return the size in bytes in size. */
+/* compute a utf8 byte sequence for character uchar and return the size in bytes in size. */
 /* return -1 in case uchar is invalid, otherwise return 0 */
 int utf8_encode_char(int uchar, int* size, unsigned char (*out)[4]){
   int c = uchar;
@@ -198,7 +230,7 @@ int utf8_encode_char(int uchar, int* size, unsigned char (*out)[4]){
   if(
     (c < 0 || c > 0x10ffff) || // out of unicode range
     (c == 0xfffe || c == 0xffff) || // half of a BOM
-    (c >= 0xd800 && c <= 0xdfff) // utf16 half of a surrogate pair
+    (c >= 0xd800 && c <= 0xdfff) // half of a utf16 surrogate pair
   ){
     fprintf(stderr, "utf8_encode_char bad codepoint encountered c = %x\n", c);
     return -1;

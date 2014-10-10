@@ -25,7 +25,7 @@
 typedef enum {
     CON, INT, BIGINT, FLOAT, STRING,
     BITS8, BITS16, BITS32, BITS64, UNIT, PTR, FWD,
-    MANAGEDPTR, BUFFER, USTRING, STORAGE
+    MANAGEDPTR, BUFFER, STORAGE
 } ClosureType;
 
 typedef struct Closure *VAL;
@@ -42,13 +42,15 @@ typedef struct {
     void* data;
 } ManagedPtr;
 
-// Storage cell for raw data, should be the only reference to the store
+// cell for raw data, should be the only reference to the store
 typedef struct {
-  unsigned char store[];
   size_t size;
+  size_t lower_bound; // nothing references region before this
+  size_t upper_bound; // nothing references region after this
+  unsigned char store[];
 } Storage;
 
-// Unicode string view backed by Storage, to support String
+// a view of some raw storage, used for String and CString, could be used for other things
 typedef struct {
   VAL storage;
   size_t offset;
@@ -56,11 +58,13 @@ typedef struct {
   size_t byte_count;
 } String;
 
-// Buffer view for CString (STRING) and Buffer (BUFFER)
+// a buffer cell, could be unified to point into a Storage instead
 typedef struct {
-  VAL storage;
-  size_t offset;
-  size_t size;
+    // If we ever have multithreaded access to the same heap,
+    // fill is mutable so needs synchronization!
+    size_t fill;
+    size_t cap;
+    unsigned char store[];
 } Buffer;
 
 typedef struct Closure {
@@ -80,9 +84,9 @@ typedef struct Closure {
         uint16_t bits16;
         uint32_t bits32;
         uint64_t bits64;
-        ManagedPtr* mptr;
         Buffer* buf;
-        String* ustr;
+        ManagedPtr* mptr;
+        String* string;
         Storage* storage;
     } info;
 } Closure;
@@ -286,13 +290,17 @@ VAL idris_strRev(VM* vm, VAL str);
 
 // String primitives
 
-// length
-// pack
-// uncons
-// join
-// reverse
-// breakOn
-// splitAt
+VAL idris_stringCons(VM* vm, VAL c, VAL str);
+VAL idris_stringAppend(VM* vm, VAL str1, VAL str2);
+VAL idris_stringUnsafeHead(VM* vm, VAL str);
+VAL idris_stringUnsafeTail(VM* vm, VAL str);
+VAL idris_stringLength(VM* vm, VAL str);
+VAL idris_stringReverse(VM* vm, VAL str);
+VAL idris_stringSlice(VM* vm, VAL i0, VAL i1, VAL str);
+VAL idris_stringCompare(VM* vm, VAL str1, VAL str2);
+
+VAL idris_encodeChar(VM* vm, VAL c);
+VAL idris_decodeChar(VM* vm, VAL i);
 
 // Buffer primitives
 VAL idris_allocate(VM* vm, VAL hint);
@@ -317,18 +325,6 @@ VAL idris_peekB32BE(VM* vm, VAL buf, VAL off);
 VAL idris_peekB64Native(VM* vm, VAL buf, VAL off);
 VAL idris_peekB64LE(VM* vm, VAL buf, VAL off);
 VAL idris_peekB64BE(VM* vm, VAL buf, VAL off);
-
-// New buffer primitives
-VAL idris_bufferNew(VM* vm, VAL size);
-VAL idris_bufferSize(VM* vm, VAL buffer);
-VAL idris_bufferPeek(VM* vm, VAL i, VAL buffer);
-VAL idris_bufferPoke(VM* vm, VAL i, VAL v, VAL buffer);
-VAL idris_bufferSlice(VM* vm, VAL i0, VAL i1, VAL buffer);
-
-// Global static values
-extern String __idris_emptyStr;    // {NULL, 0, 0, 0}
-extern Buffer __idris_emptyBuffer; // {NULL, 0, 0}
-
 
 // system infox
 // used indices:
