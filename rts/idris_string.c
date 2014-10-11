@@ -14,10 +14,12 @@ VAL idris_stringReverse(VM* vm, VAL str);
 VAL idris_stringSlice(VM* vm, VAL i0, VAL i1, VAL str);
 VAL idris_stringCompare(VM* vm, VAL str1, VAL str2);
 
+VAL idris_unsafeIntToChar(VM* vm, VAL i);
+VAL idris_unsafeUtf8Decode(VM* vm, VAL str);
 */
 
-int utf8_encode_char(int uchar, int* size, unsigned char (*out)[4]);
-int utf8_decode_char(char bytes[4], int* uchar, int* size);
+int utf8_encode_char(int c, int* size, unsigned char (*out)[4]);
+int utf8_decode_char(unsigned char* octets, int in_count, int* out_c, int* used);
 
 VAL idris_stringCons(VM* vm, VAL c, VAL str){
   unsigned char utf8[4];
@@ -228,12 +230,10 @@ VAL idris_stringCompare(VM* vm, VAL str1, VAL str2){
 
 /* compute a utf8 byte sequence for character uchar and return the size in bytes in size. */
 /* return -1 in case uchar is invalid, otherwise return 0 */
-int utf8_encode_char(int uchar, int* size, unsigned char (*out)[4]){
-  int c = uchar;
+int utf8_encode_char(int c, int* size, unsigned char (*out)[4]){
 
   if(
     (c < 0 || c > 0x10ffff) || // out of unicode range
-    (c == 0xfffe || c == 0xffff) || // half of a BOM
     (c >= 0xd800 && c <= 0xdfff) // half of a utf16 surrogate pair
   ){
     fprintf(stderr, "utf8_encode_char bad codepoint encountered c = %x\n", c);
@@ -315,7 +315,7 @@ int utf8_decode_char(unsigned char* octets, int in_count, int* out_c, int* used)
     *out_c = ((a & 0xf) << 12) | ((b & 0x3f) << 6) | (c & 0x3f);
 
     if(*out_c < 0x800) goto invalid; /* overlong */
-    if(*out_c >= 0xd800 || *out_c <= 0xd8ff) goto invalid; /* a utf16 surrogate */
+    if(*out_c >= 0xd800 || *out_c <= 0xdfff) goto invalid; /* a utf16 surrogate */
 
     return 0;
 

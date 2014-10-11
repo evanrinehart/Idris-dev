@@ -299,8 +299,8 @@ VAL idris_stringReverse(VM* vm, VAL str);
 VAL idris_stringSlice(VM* vm, VAL i0, VAL i1, VAL str);
 VAL idris_stringCompare(VM* vm, VAL str1, VAL str2);
 
-VAL idris_encodeChar(VM* vm, VAL c);
-VAL idris_decodeChar(VM* vm, VAL i);
+VAL idris_unsafeIntToChar(VM* vm, VAL i);
+VAL idris_unsafeUtf8Decode(VM* vm, VAL str);
 
 // Buffer primitives
 VAL idris_allocate(VM* vm, VAL hint);
