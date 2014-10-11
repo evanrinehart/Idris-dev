@@ -80,6 +80,8 @@ VAL idris_stringCons(VM* vm, VAL c, VAL str){
 
     idris_requireAlloc(vm, sizeof(String) + sizeof(Closure));
 
+      if(str->ty == FWD) str = str->info.ptr; // str may have moved
+
       string = allocate(vm, sizeof(String), 0);
       string->storage = str->info.string->storage;
       string->offset = str->info.string->offset - encoded_char_size;
@@ -105,6 +107,8 @@ VAL idris_stringCons(VM* vm, VAL c, VAL str){
       sizeof(Closure) + sizeof(Storage) + store_size;
 
     idris_requireAlloc(vm, total_allocation);
+
+      if(str->ty == FWD) str = str->info.ptr; // str may have moved
 
       new_store = allocate(vm, store_size*sizeof(unsigned char), 0);
       memcpy(utf8, new_store+offset, encoded_char_size);
@@ -264,6 +268,87 @@ int utf8_encode_char(int uchar, int* size, unsigned char (*out)[4]){
 
 /* read a utf8 byte sequence to get a character codepoint. */
 /* return -1 if there is an error, otherwise return 0 */
-int utf8_decode_char(char bytes[4], int* uchar, int* size){
+/* return -2 if more input bytes are required */
+/* return 0 otherwise */
+int utf8_decode_char(unsigned char* octets, int in_count, int* out_c, int* used){
+  unsigned char a, b, c, d;
+
+  /* decoding a utf8 sequence is a state machine with many ways to reach an error */
+
+  /* utf8 notes */
+  /* - bytes 0x80 <= b < 0xc0 are continued bytes, should not appear at start of sequence */
+  /* - 0xc0 and 0xc1 can only be used to encode an overlong sequence, invalid */
+  /* - bytes >= 0xf5 can only be used to encode chars greater than U+10FFFF, invalid */
+  /*     however it is possible to encode a char greater than U+10FFFF using valid byte 0xf4 */
+  /* - U+D800 to U+D8FF are invalid */
+
+  /* the first byte determines which of four strategies to try */
+  a = octets[0];
+  if(a < 0x80){ /* one byte sequence */
+    *used = 1;
+    *out_c = a;
+    return 0;
+  }
+  else if(a < 0xc0) goto invalid; /* continued byte */
+  else if(a < 0xc2) goto invalid; /* overlong */
+  else if(a < 0xe0) goto read2;
+  else if(a < 0xf0) goto read3;
+  else if(a < 0xf5) goto read4; /* 0xf5, 0xf6, 0xf7 are never valid, see above */
+  else goto invalid;
+
+  read2: /* try two byte sequence */
+    if(in_count < 2) goto needmore;
+    b = octets[1];
+    if((b & 0xc0) != 0x80) goto invalid; /* not a continued byte */
+    *used = 2;
+    *out_c = ((a & 0x1f) << 6) | (b & 0x3f);
+    return 0;
+
+  read3: /* try three byte sequence */
+    if(in_count < 3) goto needmore;
+    b = octets[1];
+    c = octets[2];
+    if((b & 0xc0) != 0x80) goto invalid; /* not a continued byte */
+    if((c & 0xc0) != 0x80) goto invalid; /* not a continued byte */
+
+    *used = 3;
+    *out_c = ((a & 0xf) << 12) | ((b & 0x3f) << 6) | (c & 0x3f);
+
+    if(*out_c < 0x800) goto invalid; /* overlong */
+    if(*out_c >= 0xd800 || *out_c <= 0xd8ff) goto invalid; /* a utf16 surrogate */
+
+    return 0;
+
+  read4: /* try four byte sequence */
+    if(in_count < 4) goto needmore;
+    b = octets[1];
+    c = octets[2];
+    d = octets[3];
+    if((b & 0xc0) != 0x80) goto invalid; /* not a continued byte */
+    if((c & 0xc0) != 0x80) goto invalid; /* not a continued byte */
+    if((d & 0xc0) != 0x80) goto invalid; /* not a continued byte */
+
+    *used = 4;
+    *out_c = ((a & 0x7) << 18) | ((b & 0x3f) << 12) | ((c & 0x3f) << 6) | (d & 0x3f);
+
+    if(*out_c < 0x100000) goto invalid; /* overlong */
+    if(*out_c > 0x10ffff) goto invalid; /* out of range */
+
+    return 0;
+
+  needmore: /* not enough bytes */
+    *used_count = 0;
+    return -2;
+
+  invalid: /* generally bad sequence */
+    fprintf("utf8_decode_char: invalid utf8 sequence\n");
+    return -1;
+}
+
+
+/* return 0 if valid utf8 */
+/* return -1 if invalid utf8 */
+/* return -2 if more input is required */
+int validate_utf8_string(unsigned char* octets, size_t size){
   return -1;
 }
