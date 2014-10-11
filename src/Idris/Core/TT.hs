@@ -38,6 +38,7 @@ import qualified Data.Vector.Unboxed as V
 import qualified Data.Binary as B
 import Data.Binary hiding (get, put)
 import Foreign.Storable (sizeOf)
+import Data.ByteString as BS (ByteString)
 
 import Util.Pretty hiding (Str)
 
@@ -514,7 +515,7 @@ intTyWidth ITCChar = error "IRTS.Lang.intTyWidth: Characters have platform and b
 intTyWidth ITBig = error "IRTS.Lang.intTyWidth: Big integers have variable width"
 
 data Const = I Int | BI Integer | Fl Double
-           | Ch Char | Str String | CCh Char | CStr String
+           | Ch Char | Str String | CCh Char | CStr ByteString
            | B8 Word8 | B16 Word16 | B32 Word32 | B64 Word64
            | B8V (Vector Word8) | B16V (Vector Word16)
            | B32V (Vector Word32) | B64V (Vector Word64)
@@ -536,7 +537,7 @@ instance Pretty Const OutputAnnotation where
   pretty (Ch c) = text . show $ c
   pretty (Str s) = text s
   pretty (CCh c) = text . show $ c
-  pretty (CStr s) = text s
+  pretty (CStr bs) = text . show $ bs
   pretty (AType a) = pretty a
   pretty StrType = text "String"
   pretty CStrType = text "CString"
@@ -1196,7 +1197,7 @@ instance Show Const where
     show (Ch c) = show c
     show (Str s) = show s
     show (CCh c) = show c
-    show (CStr s) = show s
+    show (CStr bs) = show bs
     show (B8 x) = show x
     show (B16 x) = show x
     show (B32 x) = show x

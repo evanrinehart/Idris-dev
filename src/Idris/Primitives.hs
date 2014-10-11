@@ -15,6 +15,7 @@ import Data.Char
 import Data.Function (on)
 import Data.Vector.Unboxed (Vector)
 import qualified Data.Vector.Unboxed as V
+import qualified Data.Text.Encoding as T
 
 data Prim = Prim { p_name  :: Name,
                    p_type  :: Type,
@@ -122,9 +123,9 @@ primitives =
    Prim (sUN "prim_lenString") (ty [CStrType] (AType (ATInt ITNative))) 1 (p_strLen)
     (1, LStrLen) total,
     -- Conversions
-   Prim (sUN "prim__charToInt") (ty [(AType (ATInt ITCChar))] (AType (ATInt ITNative))) 1 (c_charToInt)
+   Prim (sUN "prim__ccharToInt") (ty [(AType (ATInt ITCChar))] (AType (ATInt ITNative))) 1 (c_ccharToInt)
      (1, LChInt ITNative) total,
-   Prim (sUN "prim__intToChar") (ty [(AType (ATInt ITNative))] (AType (ATInt ITCChar))) 1 (c_intToChar)
+   Prim (sUN "prim__truncIntToCChar") (ty [(AType (ATInt ITNative))] (AType (ATInt ITCChar))) 1 (c_truncIntToCChar)
      (1, LIntCh ITNative) total,
    Prim (sUN "prim__strToFloat") (ty [CStrType] (AType ATFloat)) 1 (c_strToFloat)
      (1, LStrFloat) total,
@@ -156,6 +157,23 @@ primitives =
    Prim (sUN "prim__negFloat") (ty [(AType ATFloat)] (AType ATFloat)) 1 (c_negFloat)
      (1, LFNegate) total,
 
+   -- Strings
+   Prim (sUN "prim__stringCons") (ty [CharType, StrType] StrType 1 (p_stringCons) (1, LStringCons) total,
+   Prim (sUN "prim__stringAppend") (ty [StrType, StrType] StrType 1 (p_stringAppend) (1, LStringAppend) total,
+   Prim (sUN "prim__stringHead") (ty [StrType] CharType 1 (p_stringHead) (1, LStringHead) partial,
+   Prim (sUN "prim__stringTail") (ty [StrType] StrType 1 (p_stringTail) (1, LStringTail) partial,
+   Prim (sUN "prim__stringLength") (ty [StrType] (AType (ATInt ITNative)) 1 (p_stringLength) (1, LStringLength) total,
+   Prim (sUN "prim__stringReverse") (ty [StrType] StrType 1 (p_stringReverse) (1, LStringReverse) total,
+   Prim (sUN "prim__stringSlice") (ty [(AType (ATInt ITNative)), (AType (ATInt ITNative)), StrType] StrType 1 (p_stringSlice) (1, LStringSlice) total,
+   Prim (sUN "prim__stringCompare") (ty [StrType, StrType] (AType (ATInt ITNative)) 1 (p_stringCompare) (1, LStringCompare) total,
+   Prim (sUN "prim__stringUtf8Decode") (ty [CStrType] StrType 1 (p_StringUtf8Decode) (1, LStringUtf8Decode) partial,
+   Prim (sUN "prim__stringUtf8Encode") (ty [StrType] CStrType 1 (p_stringUtf8Encode) (1, LStringUtf8Encode) total,
+
+   -- Char
+   Prim (sUN "prim__intToChar") (ty [(AType (ATInt ITNative))] CharType 1 (p_intToChar) (1, LIntToChar) partial,
+   Prim (sUN "prim__charToInt") (ty [CharType] (AType (ATInt ITNative)) 1 (p_charToInt) (1, LCharToInt) total,
+
+   -- CStrings
    Prim (sUN "prim__strHead") (ty [CStrType] (AType (ATInt ITCChar))) 1 (p_strHead)
      (1, LStrHead) partial,
    Prim (sUN "prim__strTail") (ty [CStrType] CStrType) 1 (p_strTail)
@@ -656,11 +674,18 @@ floatToInt :: IntTy -> [Const] -> Maybe Const
 floatToInt ity [Fl x] = Just $ toInt ity (truncate x :: Integer)
 floatToInt _ _ = Nothing
 
+c_truncIntToCChar, c_ccharToInt :: [Const] -> Maybe Const
+c_truncIntToCChar [(I x)] = Just . CCh . toEnum . (mod 256) $ x
+c_truncIntToCChar _ = Nothing
+c_ccharToInt [(CCh x)] = Just . I . fromEnum $ x
+c_ccharToInt _ = Nothing
+
 c_intToChar, c_charToInt :: [Const] -> Maybe Const
-c_intToChar [(I x)] = Just . CCh . toEnum $ x
-c_intToChar _ = Nothing
-c_charToInt [(CCh x)] = Just . I . fromEnum $ x
+c_charToInt [(Ch x)] = Just . I . fromEnum $ x
 c_charToInt _ = Nothing
+c_intToChar [(I x)] | x >= 0 && x <= 1114111 = Just . Ch . toEnum $ x
+                    | otherwise = Nothing
+c_intToChar _ = Nothing
 
 c_negFloat :: [Const] -> Maybe Const
 c_negFloat [Fl x] = Just $ Fl (negate x)
@@ -705,6 +730,33 @@ p_strCons [CCh x, CStr xs] = Just $ CStr (x:xs)
 p_strCons _ = Nothing
 p_strRev [CStr xs] = Just $ CStr (reverse xs)
 p_strRev _ = Nothing
+
+p_stringHead, p_stringTail, p_stringCons, p_stringAppend :: [Const] -> Maybe Const
+p_stringHead [Str (c:cs)] = Just (Ch c)
+p_stringHead _ = Nothing
+p_stringTail [Str (c:cs)] = Just (Str cs)
+p_stringTail _ = Nothing
+p_stringCons [Ch c, Str cs] = Just $ Str (c:cs)
+p_stringCons _ = Nothing
+p_stringAppend [Str s1, Str s2] = Just $ Str (s1++s2)
+p_stringAppend _ = Nothing
+
+p_stringLength, p_stringReverse, p_stringSlice :: [Const] -> Maybe Const
+p_stringLength [Str s] = Just $ I (length s)
+p_stringLength _ = Nothing
+p_stringReverse [Str s] = Just $ Str (reverse s)
+p_stringReverse _ = Nothing
+p_stringSlice [I i1, I i2, Str s] = Just . Str . take (i2-i1) . drop i1 $ s
+p_stringSlice _ = Nothing
+
+p_stringUtf8Encode, p_stringUtf8Decode :: [Const] -> Maybe Const
+p_stringUtf8Encode [Str s] = Just . CStr . T.encodeUtf8 $ s
+p_stringUtf8Encode = Nothing
+p_stringUtf8Decode [CStr bs] =
+  case T.decodeUtf8' bs of
+    Right txt -> Str (T.unpack txt)
+    Left _ -> Nothing
+p_stringUtf8Decode = Nothing
 
 p_allocate, p_appendBuffer :: [Const] -> Maybe Const
 p_allocate [B64 _] = Just $ B8V V.empty
